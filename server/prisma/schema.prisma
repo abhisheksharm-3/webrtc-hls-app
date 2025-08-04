@@ -1,0 +1,40 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Room {
+  id              String   @id @default(uuid())
+  name            String
+  isActive        Boolean  @default(true)
+  participantCount Int     @default(0)
+  hlsUrl          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  participants Participant[]
+  
+  @@map("rooms")
+}
+
+model Participant {
+  id          String   @id @default(uuid())
+  roomId      String
+  socketId    String   @unique
+  isHost      Boolean  @default(false)
+  isStreaming Boolean  @default(false)
+  hasVideo    Boolean  @default(false)
+  hasAudio    Boolean  @default(false)
+  joinedAt    DateTime @default(now())
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@map("participants")
+}
