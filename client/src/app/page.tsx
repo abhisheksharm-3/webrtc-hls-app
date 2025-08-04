@@ -6,6 +6,8 @@ import { Button } from '../components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { Badge } from '../components/ui/badge';
+import { Separator } from '../components/ui/separator';
 import { 
   Dialog, 
   DialogContent, 
@@ -14,6 +16,21 @@ import {
   DialogTitle, 
   DialogTrigger 
 } from '../components/ui/dialog';
+import { 
+  Video, 
+  Radio, 
+  Users, 
+  Zap, 
+  Shield, 
+  Smartphone, 
+  Play, 
+  UserPlus,
+  Eye,
+  Rocket,
+  Settings,
+  Repeat,
+  Globe
+} from 'lucide-react';
 
 export default function HomePage() {
   const [roomId, setRoomId] = useState('');
@@ -42,25 +59,31 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
       {/* Header */}
-      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+      <header className="glass-effect sticky top-0 z-50 border-b">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">W</span>
+            <div className="flex items-center space-x-3">
+              <div className="relative">
+                <div className="w-10 h-10 gradient-primary rounded-xl flex items-center justify-center shadow-lg">
+                  <Video className="w-5 h-5 text-primary-foreground" />
+                </div>
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-background animate-pulse" />
               </div>
-              <h1 className="text-xl font-bold text-gray-900">WebRTC-HLS</h1>
+              <div>
+                <h1 className="text-xl font-bold text-foreground">WebRTC-HLS</h1>
+                <p className="text-xs text-muted-foreground">Live Streaming Platform</p>
+              </div>
             </div>
-            <nav className="hidden md:flex space-x-6">
-              <Link href="#features" className="text-gray-600 hover:text-gray-900 transition-colors">
+            <nav className="hidden md:flex items-center space-x-6">
+              <Link href="#features" className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium">
                 Features
               </Link>
-              <Link href="#how-it-works" className="text-gray-600 hover:text-gray-900 transition-colors">
+              <Link href="#how-it-works" className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium">
                 How it Works
               </Link>
-              <Link href="/watch" className="text-gray-600 hover:text-gray-900 transition-colors">
+              <Link href="/watch" className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium">
                 Watch Streams
               </Link>
             </nav>
@@ -69,52 +92,68 @@ export default function HomePage() {
       </header>
 
       {/* Hero Section */}
-      <section className="container mx-auto px-4 py-16 text-center">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
-            Stream Live with
-            <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              {' '}WebRTC & HLS
-            </span>
-          </h1>
-          <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            Real-time peer-to-peer communication with unlimited viewers. 
-            Start streaming instantly or broadcast to thousands with HLS technology.
-          </p>
+      <section className="container mx-auto px-4 py-20 text-center">
+        <div className="max-w-4xl mx-auto space-y-8">
+          <div className="space-y-4">
+            <Badge variant="outline" className="mb-4">
+              <Zap className="w-3 h-3 mr-1" />
+              Real-time Streaming
+            </Badge>
+            <h1 className="text-5xl md:text-7xl font-bold leading-tight">
+              Stream Live with
+              <span className="bg-gradient-to-r from-primary via-primary/80 to-accent bg-clip-text text-transparent">
+                {' '}Next-Gen
+              </span>
+              <br />
+              WebRTC & HLS
+            </h1>
+            <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+              Experience ultra-low latency peer-to-peer communication with unlimited scalability. 
+              Start streaming instantly or broadcast to thousands with professional-grade HLS technology.
+            </p>
+          </div>
           
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <Button 
               onClick={handleCreateRoom}
               size="lg"
-              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-lg px-8"
+              className="gradient-primary shadow-glow text-lg px-8 h-12"
             >
-              🚀 Start Streaming Now
+              <Rocket className="w-5 h-5 mr-2" />
+              Start Streaming Now
             </Button>
             
             <Dialog open={showJoinDialog} onOpenChange={setShowJoinDialog}>
               <DialogTrigger asChild>
-                <Button variant="outline" size="lg" className="text-lg px-8">
-                  👥 Join Room
+                <Button variant="outline" size="lg" className="text-lg px-8 h-12">
+                  <UserPlus className="w-5 h-5 mr-2" />
+                  Join with Room Code
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                  <DialogTitle>Join a Stream Room</DialogTitle>
+                  <DialogTitle className="flex items-center gap-2">
+                    <UserPlus className="w-5 h-5" />
+                    Join a Stream Room
+                  </DialogTitle>
                   <DialogDescription>
-                    Enter the room ID to join an existing streaming session.
+                    Enter the room ID to join an existing streaming session. You can get this from the room creator.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="room-id">Room ID</Label>
+                    <Label htmlFor="room-id">Room Code</Label>
                     <Input
                       id="room-id"
-                      placeholder="Enter room ID (e.g., abc123xyz)"
+                      placeholder="Enter room code (e.g., abc123xyz)"
                       value={roomId}
                       onChange={(e) => setRoomId(e.target.value)}
                       onKeyPress={handleKeyPress}
                       className="col-span-3"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Room codes are typically 9 characters long and case-sensitive
+                    </p>
                   </div>
                 </div>
                 <div className="flex justify-end gap-2">
@@ -122,6 +161,7 @@ export default function HomePage() {
                     Cancel
                   </Button>
                   <Button onClick={handleJoinRoom} disabled={!roomId.trim()}>
+                    <Play className="w-4 h-4 mr-2" />
                     Join Room
                   </Button>
                 </div>
@@ -129,114 +169,179 @@ export default function HomePage() {
             </Dialog>
             
             <Link href="/watch">
-              <Button variant="outline" size="lg" className="text-lg px-8">
-                📺 Browse Streams
+              <Button variant="outline" size="lg" className="text-lg px-8 h-12">
+                <Eye className="w-5 h-5 mr-2" />
+                Browse Live Streams
               </Button>
             </Link>
           </div>
 
           {/* Quick Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-2xl mx-auto">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">⚡</div>
-              <div className="text-sm text-gray-600">Low Latency</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-3xl mx-auto pt-8">
+            <div className="text-center space-y-2">
+              <div className="w-12 h-12 gradient-primary rounded-full flex items-center justify-center mx-auto">
+                <Zap className="w-6 h-6 text-primary-foreground" />
+              </div>
+              <div className="text-sm font-medium text-foreground">Ultra Low Latency</div>
+              <div className="text-xs text-muted-foreground">&lt; 100ms delay</div>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600">∞</div>
-              <div className="text-sm text-gray-600">Unlimited Viewers</div>
+            <div className="text-center space-y-2">
+              <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-purple-600 rounded-full flex items-center justify-center mx-auto">
+                <Globe className="w-6 h-6 text-white" />
+              </div>
+              <div className="text-sm font-medium text-foreground">Unlimited Scale</div>
+              <div className="text-xs text-muted-foreground">∞ concurrent viewers</div>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">🔒</div>
-              <div className="text-sm text-gray-600">Secure</div>
+            <div className="text-center space-y-2">
+              <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center justify-center mx-auto">
+                <Shield className="w-6 h-6 text-white" />
+              </div>
+              <div className="text-sm font-medium text-foreground">Enterprise Security</div>
+              <div className="text-xs text-muted-foreground">End-to-end encrypted</div>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-orange-600">📱</div>
-              <div className="text-sm text-gray-600">Cross Platform</div>
+            <div className="text-center space-y-2">
+              <div className="w-12 h-12 bg-gradient-to-r from-orange-500 to-orange-600 rounded-full flex items-center justify-center mx-auto">
+                <Smartphone className="w-6 h-6 text-white" />
+              </div>
+              <div className="text-sm font-medium text-foreground">Cross Platform</div>
+              <div className="text-xs text-muted-foreground">Any device, anywhere</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Quick Join Section */}
+      <section className="py-12 bg-muted/30">
+        <div className="container mx-auto px-4">
+          <div className="max-w-2xl mx-auto text-center">
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-2xl font-bold text-foreground mb-2">Already have a room code?</h2>
+                <p className="text-muted-foreground">Join an existing stream quickly with your room code</p>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
+                <Input
+                  placeholder="Enter room code..."
+                  value={roomId}
+                  onChange={(e) => setRoomId(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  className="flex-1"
+                />
+                <Button 
+                  onClick={handleJoinRoom} 
+                  disabled={!roomId.trim()}
+                  className="sm:px-6"
+                >
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  Join Now
+                </Button>
+              </div>
+              
+              <p className="text-xs text-muted-foreground">
+                Room codes are case-sensitive and usually 9 characters long
+              </p>
             </div>
           </div>
         </div>
       </section>
 
       {/* Features Section */}
-      <section id="features" className="bg-white py-16">
+      <section id="features" className="py-20 bg-muted/30">
         <div className="container mx-auto px-4">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Powerful Features</h2>
-            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Everything you need for professional live streaming and broadcasting
+          <div className="text-center mb-16 space-y-4">
+            <Badge variant="outline">
+              <Settings className="w-3 h-3 mr-1" />
+              Features
+            </Badge>
+            <h2 className="text-4xl font-bold text-foreground">Powerful Streaming Features</h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Everything you need for professional live streaming and broadcasting, built with modern technology
             </p>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <Card>
-              <CardHeader>
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
-                  <span className="text-2xl">📹</span>
+            <Card className="group hover:shadow-lg transition-all duration-300 border-0 shadow-md">
+              <CardHeader className="space-y-4">
+                <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                  <Video className="w-6 h-6 text-primary" />
                 </div>
-                <CardTitle>WebRTC Streaming</CardTitle>
-                <CardDescription>
-                  Ultra-low latency peer-to-peer video and audio streaming using modern WebRTC technology
-                </CardDescription>
+                <div className="space-y-2">
+                  <CardTitle className="text-xl">WebRTC Streaming</CardTitle>
+                  <CardDescription className="text-base leading-relaxed">
+                    Ultra-low latency peer-to-peer video and audio streaming using cutting-edge WebRTC technology
+                  </CardDescription>
+                </div>
               </CardHeader>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
-                  <span className="text-2xl">📡</span>
+            <Card className="group hover:shadow-lg transition-all duration-300 border-0 shadow-md">
+              <CardHeader className="space-y-4">
+                <div className="w-12 h-12 bg-purple-500/10 rounded-xl flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
+                  <Radio className="w-6 h-6 text-purple-600" />
                 </div>
-                <CardTitle>HLS Broadcasting</CardTitle>
-                <CardDescription>
-                  Automatic transcoding to HLS for unlimited concurrent viewers with CDN support
-                </CardDescription>
+                <div className="space-y-2">
+                  <CardTitle className="text-xl">HLS Broadcasting</CardTitle>
+                  <CardDescription className="text-base leading-relaxed">
+                    Automatic transcoding to HLS for unlimited concurrent viewers with global CDN support
+                  </CardDescription>
+                </div>
               </CardHeader>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
-                  <span className="text-2xl">👥</span>
+            <Card className="group hover:shadow-lg transition-all duration-300 border-0 shadow-md">
+              <CardHeader className="space-y-4">
+                <div className="w-12 h-12 bg-green-500/10 rounded-xl flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
+                  <Users className="w-6 h-6 text-green-600" />
                 </div>
-                <CardTitle>Multi-participant</CardTitle>
-                <CardDescription>
-                  Support for multiple streamers in a single room with seamless switching
-                </CardDescription>
+                <div className="space-y-2">
+                  <CardTitle className="text-xl">Multi-participant</CardTitle>
+                  <CardDescription className="text-base leading-relaxed">
+                    Support for multiple streamers in a single room with seamless participant management
+                  </CardDescription>
+                </div>
               </CardHeader>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mb-4">
-                  <span className="text-2xl">⚙️</span>
+            <Card className="group hover:shadow-lg transition-all duration-300 border-0 shadow-md">
+              <CardHeader className="space-y-4">
+                <div className="w-12 h-12 bg-orange-500/10 rounded-xl flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
+                  <Settings className="w-6 h-6 text-orange-600" />
                 </div>
-                <CardTitle>Production Ready</CardTitle>
-                <CardDescription>
-                  Built with TypeScript, proper error handling, and scalable architecture
-                </CardDescription>
+                <div className="space-y-2">
+                  <CardTitle className="text-xl">Production Ready</CardTitle>
+                  <CardDescription className="text-base leading-relaxed">
+                    Built with TypeScript, comprehensive error handling, and enterprise-grade architecture
+                  </CardDescription>
+                </div>
               </CardHeader>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mb-4">
-                  <span className="text-2xl">🔄</span>
+            <Card className="group hover:shadow-lg transition-all duration-300 border-0 shadow-md">
+              <CardHeader className="space-y-4">
+                <div className="w-12 h-12 bg-red-500/10 rounded-xl flex items-center justify-center group-hover:bg-red-500/20 transition-colors">
+                  <Repeat className="w-6 h-6 text-red-600" />
                 </div>
-                <CardTitle>Real-time Sync</CardTitle>
-                <CardDescription>
-                  Instant room management and signaling using Socket.io for seamless communication
-                </CardDescription>
+                <div className="space-y-2">
+                  <CardTitle className="text-xl">Real-time Sync</CardTitle>
+                  <CardDescription className="text-base leading-relaxed">
+                    Instant room management and signaling using Socket.io for seamless communication
+                  </CardDescription>
+                </div>
               </CardHeader>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center mb-4">
-                  <span className="text-2xl">🚀</span>
+            <Card className="group hover:shadow-lg transition-all duration-300 border-0 shadow-md">
+              <CardHeader className="space-y-4">
+                <div className="w-12 h-12 bg-indigo-500/10 rounded-xl flex items-center justify-center group-hover:bg-indigo-500/20 transition-colors">
+                  <Rocket className="w-6 h-6 text-indigo-600" />
                 </div>
-                <CardTitle>Easy Deployment</CardTitle>
-                <CardDescription>
-                  Docker support with complete containerization for one-click deployment
-                </CardDescription>
+                <div className="space-y-2">
+                  <CardTitle className="text-xl">Easy Deployment</CardTitle>
+                  <CardDescription className="text-base leading-relaxed">
+                    Docker support with complete containerization for seamless one-click deployment
+                  </CardDescription>
+                </div>
               </CardHeader>
             </Card>
           </div>
@@ -244,43 +349,59 @@ export default function HomePage() {
       </section>
 
       {/* How it Works Section */}
-      <section id="how-it-works" className="py-16 bg-gray-50">
+      <section id="how-it-works" className="py-20">
         <div className="container mx-auto px-4">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">How It Works</h2>
-            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Simple steps to start streaming or watching live content
+          <div className="text-center mb-16 space-y-4">
+            <Badge variant="outline">
+              <Play className="w-3 h-3 mr-1" />
+              Process
+            </Badge>
+            <h2 className="text-4xl font-bold text-foreground">How It Works</h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Get started with professional live streaming in just three simple steps
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4">
-                1
+          <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
+            <div className="text-center space-y-4">
+              <div className="relative mx-auto w-20 h-20">
+                <div className="w-20 h-20 gradient-primary rounded-2xl flex items-center justify-center text-primary-foreground text-2xl font-bold shadow-lg">
+                  1
+                </div>
+                <div className="absolute -top-2 -right-2 w-6 h-6 bg-green-500 rounded-full border-2 border-background" />
               </div>
-              <h3 className="text-xl font-semibold mb-2">Create or Join</h3>
-              <p className="text-gray-600">
-                Create a new room or join an existing one with a room ID. No registration required.
+              <h3 className="text-xl font-semibold text-foreground">Create or Join</h3>
+              <p className="text-muted-foreground leading-relaxed">
+                Create a new streaming room or join an existing one with a simple room ID. 
+                No registration or complex setup required.
               </p>
             </div>
 
-            <div className="text-center">
-              <div className="w-16 h-16 bg-purple-600 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4">
-                2
+            <div className="text-center space-y-4">
+              <div className="relative mx-auto w-20 h-20">
+                <div className="w-20 h-20 bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-lg">
+                  2
+                </div>
+                <div className="absolute -top-2 -right-2 w-6 h-6 bg-blue-500 rounded-full border-2 border-background" />
               </div>
-              <h3 className="text-xl font-semibold mb-2">Start Streaming</h3>
-              <p className="text-gray-600">
-                Allow camera/microphone access and start streaming with low-latency WebRTC technology.
+              <h3 className="text-xl font-semibold text-foreground">Start Streaming</h3>
+              <p className="text-muted-foreground leading-relaxed">
+                Allow camera and microphone access, then start streaming instantly with 
+                ultra-low latency WebRTC technology.
               </p>
             </div>
 
-            <div className="text-center">
-              <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4">
-                3
+            <div className="text-center space-y-4">
+              <div className="relative mx-auto w-20 h-20">
+                <div className="w-20 h-20 bg-gradient-to-r from-green-500 to-green-600 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-lg">
+                  3
+                </div>
+                <div className="absolute -top-2 -right-2 w-6 h-6 bg-orange-500 rounded-full border-2 border-background" />
               </div>
-              <h3 className="text-xl font-semibold mb-2">Scale with HLS</h3>
-              <p className="text-gray-600">
-                Enable HLS for unlimited viewers or share the watch link for public broadcasting.
+              <h3 className="text-xl font-semibold text-foreground">Scale with HLS</h3>
+              <p className="text-muted-foreground leading-relaxed">
+                Enable HLS broadcasting for unlimited viewers or share the watch link 
+                for public streaming events.
               </p>
             </div>
           </div>
@@ -288,82 +409,142 @@ export default function HomePage() {
       </section>
 
       {/* CTA Section */}
-      <section className="bg-gradient-to-r from-blue-600 to-purple-600 py-16 text-white">
+      <section className="py-20 bg-muted/50">
         <div className="container mx-auto px-4 text-center">
-          <h2 className="text-3xl font-bold mb-4">Ready to Start Streaming?</h2>
-          <p className="text-xl mb-8 opacity-90">
-            Join thousands of streamers using our platform for live broadcasting
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button 
-              onClick={handleCreateRoom}
-              size="lg"
-              variant="secondary"
-              className="text-lg px-8"
-            >
-              🎥 Create Room Now
-            </Button>
-            <Link href="/watch">
+          <div className="max-w-3xl mx-auto space-y-8">
+            <div className="space-y-4">
+              <h2 className="text-4xl font-bold text-foreground">Ready to Start Streaming?</h2>
+              <p className="text-xl text-muted-foreground">
+                Join thousands of creators and businesses using our platform for professional live broadcasting
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button 
+                onClick={handleCreateRoom}
                 size="lg"
-                variant="outline"
-                className="text-lg px-8 border-white text-white hover:bg-white hover:text-blue-600"
+                className="gradient-primary shadow-glow text-lg px-8 h-12"
               >
-                👀 Watch Live Streams
+                <Video className="w-5 h-5 mr-2" />
+                Create Room Now
               </Button>
-            </Link>
+              <Link href="/watch">
+                <Button 
+                  variant="outline"
+                  size="lg"
+                  className="text-lg px-8 h-12"
+                >
+                  <Eye className="w-5 h-5 mr-2" />
+                  Watch Live Streams
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12">
+      <footer className="border-t bg-card text-card-foreground py-12">
         <div className="container mx-auto px-4">
           <div className="grid md:grid-cols-4 gap-8">
-            <div>
-              <div className="flex items-center space-x-2 mb-4">
-                <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">W</span>
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 gradient-primary rounded-xl flex items-center justify-center shadow-lg">
+                  <Video className="w-5 h-5 text-primary-foreground" />
                 </div>
-                <h3 className="text-xl font-bold">WebRTC-HLS</h3>
+                <div>
+                  <h3 className="text-xl font-bold">WebRTC-HLS</h3>
+                  <p className="text-xs text-muted-foreground">Live Streaming Platform</p>
+                </div>
               </div>
-              <p className="text-gray-400">
-                Production-grade streaming platform with WebRTC and HLS technology.
+              <p className="text-muted-foreground leading-relaxed">
+                Production-grade streaming platform powered by WebRTC and HLS technology for creators and enterprises.
               </p>
             </div>
             
-            <div>
-              <h4 className="font-semibold mb-4">Platform</h4>
-              <ul className="space-y-2 text-gray-400">
-                <li><Link href="/stream" className="hover:text-white transition-colors">Start Streaming</Link></li>
-                <li><Link href="/watch" className="hover:text-white transition-colors">Watch Streams</Link></li>
-                <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
+            <div className="space-y-4">
+              <h4 className="font-semibold text-foreground">Platform</h4>
+              <ul className="space-y-3 text-sm">
+                <li>
+                  <Link href="/stream" className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2">
+                    <Video className="w-3 h-3" />
+                    Start Streaming
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/watch" className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2">
+                    <Eye className="w-3 h-3" />
+                    Watch Streams
+                  </Link>
+                </li>
+                <li>
+                  <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2">
+                    <Settings className="w-3 h-3" />
+                    Features
+                  </a>
+                </li>
               </ul>
             </div>
             
-            <div>
-              <h4 className="font-semibold mb-4">Technology</h4>
-              <ul className="space-y-2 text-gray-400">
-                <li>WebRTC</li>
-                <li>HLS Streaming</li>
-                <li>Mediasoup SFU</li>
-                <li>Next.js</li>
+            <div className="space-y-4">
+              <h4 className="font-semibold text-foreground">Technology</h4>
+              <ul className="space-y-3 text-sm text-muted-foreground">
+                <li className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-primary rounded-full" />
+                  WebRTC Protocol
+                </li>
+                <li className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-purple-500 rounded-full" />
+                  HLS Streaming
+                </li>
+                <li className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full" />
+                  Mediasoup SFU
+                </li>
+                <li className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                  Next.js Framework
+                </li>
               </ul>
             </div>
             
-            <div>
-              <h4 className="font-semibold mb-4">Support</h4>
-              <ul className="space-y-2 text-gray-400">
-                <li>Documentation</li>
-                <li>API Reference</li>
-                <li>Community</li>
-                <li>GitHub</li>
+            <div className="space-y-4">
+              <h4 className="font-semibold text-foreground">Support</h4>
+              <ul className="space-y-3 text-sm">
+                <li>
+                  <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
+                    Documentation
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
+                    API Reference
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
+                    Community
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
+                    GitHub
+                  </a>
+                </li>
               </ul>
             </div>
           </div>
           
-          <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
-            <p>&copy; 2025 WebRTC-HLS Platform. Built with ❤️ using Next.js, Mediasoup, and FFmpeg.</p>
+          <Separator className="my-8" />
+          
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <p className="text-sm text-muted-foreground">
+              &copy; 2025 WebRTC-HLS Platform. Built with ❤️ using Next.js, Mediasoup, and FFmpeg.
+            </p>
+            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+              <a href="#" className="hover:text-foreground transition-colors">Privacy</a>
+              <a href="#" className="hover:text-foreground transition-colors">Terms</a>
+              <a href="#" className="hover:text-foreground transition-colors">Support</a>
+            </div>
           </div>
         </div>
       </footer>

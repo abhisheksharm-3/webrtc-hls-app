@@ -4,6 +4,28 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
 import { Device } from 'mediasoup-client';
+import { Button } from '../../components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
+import { Avatar, AvatarFallback } from '../../components/ui/avatar';
+import { Separator } from '../../components/ui/separator';
+import { Label } from '../../components/ui/label';
+import { 
+  Video, 
+  VideoOff, 
+  Mic, 
+  MicOff, 
+  Users, 
+  Copy, 
+  Play, 
+  Square, 
+  Radio,
+  Settings,
+  Share,
+  AlertCircle,
+  Wifi,
+  WifiOff
+} from 'lucide-react';
 
 interface Participant {
   id: string;
@@ -39,135 +61,13 @@ export default function StreamPage() {
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
 
-  const cleanup = useCallback(() => {
-    if (isStreaming) {
-      // Stop local tracks
-      if (localVideoRef.current?.srcObject) {
-        const stream = localVideoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
-        localVideoRef.current.srcObject = null;
-      }
+  useEffect(() => {
+    if (!roomId) {
+      router.push('/');
+      return;
     }
-    
-    consumers.forEach(consumer => consumer.close());
-    sendTransport?.close();
-    recvTransport?.close();
-    socket?.disconnect();
-  }, [isStreaming, consumers, sendTransport, recvTransport, socket]);
 
-  const handleRouterRtpCapabilities = useCallback(async (rtpCapabilities: Record<string, any>) => {
-    if (!device) return;
-    
-    try {
-      await device.load({ routerRtpCapabilities: rtpCapabilities });
-      console.log('Device loaded with RTP capabilities');
-      
-      // Create transports
-      if (socket) {
-        socket.emit('create-transport', { 
-          roomId,
-          type: 'send' 
-        });
-        
-        socket.emit('create-transport', { 
-          roomId,
-          type: 'recv' 
-        });
-      }
-    } catch (error) {
-      console.error('Error loading device:', error);
-      setError('Failed to load media device capabilities');
-    }
-  }, [device, socket, roomId]);
-
-  const handleTransportCreated = useCallback(async (data: { type: string; transportOptions: Record<string, any> }) => {
-    if (!device) return;
-    
-    try {
-      if (data.type === 'send') {
-        const transport = device.createSendTransport(data.transportOptions);
-        
-        transport.on('connect', async ({ dtlsParameters }, callback, errback) => {
-          try {
-            socket?.emit('connect-transport', {
-              transportId: transport.id,
-              dtlsParameters
-            });
-            callback();
-          } catch (error) {
-            errback(error as Error);
-          }
-        });
-
-        transport.on('produce', async (parameters, callback, errback) => {
-          try {
-            socket?.emit('produce', {
-              transportId: transport.id,
-              kind: parameters.kind,
-              rtpParameters: parameters.rtpParameters,
-              appData: parameters.appData
-            });
-          } catch (error) {
-            errback(error as Error);
-          }
-        });
-
-        setSendTransport(transport);
-      } else {
-        const transport = device.createRecvTransport(data.transportOptions);
-        
-        transport.on('connect', async ({ dtlsParameters }, callback, errback) => {
-          try {
-            socket?.emit('connect-transport', {
-              transportId: transport.id,
-              dtlsParameters
-            });
-            callback();
-          } catch (error) {
-            errback(error as Error);
-          }
-        });
-
-        setRecvTransport(transport);
-      }
-    } catch (error) {
-      console.error('Error creating transport:', error);
-      setError('Failed to create media transport');
-    }
-  }, [device, socket]);
-
-  const handleTransportConnected = useCallback((data: Record<string, any>) => {
-    console.log('Transport connected:', data);
-  }, []);
-
-  const handleProducerCreated = useCallback((data: Record<string, any>) => {
-    console.log('Producer created:', data);
-  }, []);
-
-  const handleNewProducer = useCallback(async (data: { producerId: string }) => {
-    if (!recvTransport || !socket) return;
-    
-    try {
-      socket.emit('consume', {
-        producerId: data.producerId,
-        rtpCapabilities: device?.rtpCapabilities
-      });
-    } catch (error) {
-      console.error('Error consuming producer:', error);
-    }
-  }, [recvTransport, socket, device]);
-
-  const handleProducerClosed = useCallback((data: { producerId: string }) => {
-    console.log('Producer closed:', data);
-    const consumer = consumers.get(data.producerId);
-    if (consumer) {
-      consumer.close();
-      consumers.delete(data.producerId);
-      setConsumers(new Map(consumers));
-    }
-  }, [consumers]);
-
-  const initializeSocket = useCallback(() => {
+    console.log('Creating socket connection for room:', roomId);
     const newSocket = io(process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001');
     
     newSocket.on('connect', () => {
@@ -186,11 +86,6 @@ export default function StreamPage() {
 
     newSocket.on('room-joined', (data) => {
       console.log('Joined room:', data);
-      const device = new Device();
-      setDevice(device);
-      
-      // Get router RTP capabilities
-      newSocket.emit('get-router-rtp-capabilities');
     });
 
     newSocket.on('participants-list', (participantsList: Participant[]) => {
@@ -203,13 +98,6 @@ export default function StreamPage() {
 
     newSocket.on('participant-left', (participantId: string) => {
       setParticipants(prev => prev.filter(p => p.id !== participantId));
-      // Clean up consumer for this participant
-      const consumer = consumers.get(participantId);
-      if (consumer) {
-        consumer.close();
-        consumers.delete(participantId);
-        setConsumers(new Map(consumers));
-      }
     });
 
     newSocket.on('streaming-started', (data) => {
@@ -230,26 +118,17 @@ export default function StreamPage() {
       setError(error.message);
     });
 
-    // Mediasoup events
-    newSocket.on('router-rtp-capabilities', handleRouterRtpCapabilities);
-    newSocket.on('transport-created', handleTransportCreated);
-    newSocket.on('transport-connected', handleTransportConnected);
-    newSocket.on('producer-created', handleProducerCreated);
-    newSocket.on('new-producer', handleNewProducer);
-    newSocket.on('producer-closed', handleProducerClosed);
-  }, [roomId, consumers, handleRouterRtpCapabilities, handleTransportCreated, handleTransportConnected, handleProducerCreated, handleNewProducer, handleProducerClosed]);
-
-  useEffect(() => {
-    if (!roomId) {
-      router.push('/');
-      return;
-    }
-
-    initializeSocket();
     return () => {
-      cleanup();
+      console.log('Cleaning up socket connection');
+      newSocket.disconnect();
+      
+      // Stop any active media streams
+      if (localVideoRef.current?.srcObject) {
+        const stream = localVideoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+      }
     };
-  }, [roomId, router, initializeSocket, cleanup]);
+  }, [roomId]);
 
   const startStreaming = async () => {
     try {
@@ -263,39 +142,6 @@ export default function StreamPage() {
       }
 
       setMediaDevices({ video: true, audio: true });
-
-      // Produce video and audio
-      if (sendTransport) {
-        const videoTrack = stream.getVideoTracks()[0];
-        const audioTrack = stream.getAudioTracks()[0];
-
-        if (videoTrack) {
-          const videoProducer = await sendTransport.produce({
-            track: videoTrack,
-            encodings: [
-              { maxBitrate: 100000 },
-              { maxBitrate: 300000 },
-              { maxBitrate: 900000 }
-            ],
-            codecOptions: {
-              videoGoogleStartBitrate: 1000
-            }
-          });
-          
-          producers.set('video', videoProducer);
-          setProducers(new Map(producers));
-        }
-
-        if (audioTrack) {
-          const audioProducer = await sendTransport.produce({
-            track: audioTrack
-          });
-          
-          producers.set('audio', audioProducer);
-          setProducers(new Map(producers));
-        }
-      }
-
       setIsStreaming(true);
       socket?.emit('start-streaming', { roomId });
     } catch (error) {
@@ -305,10 +151,6 @@ export default function StreamPage() {
   };
 
   const stopStreaming = () => {
-    // Close all producers
-    producers.forEach(producer => producer.close());
-    setProducers(new Map());
-
     // Stop local tracks
     if (localVideoRef.current?.srcObject) {
       const stream = localVideoRef.current.srcObject as MediaStream;
@@ -349,40 +191,80 @@ export default function StreamPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="bg-white border-b">
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="glass-effect border-b sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold">Room: {roomId}</h1>
-              <p className="text-gray-600">
-                {isConnected ? '🟢 Connected' : '🔴 Disconnected'} • 
-                {participants.length} participant{participants.length !== 1 ? 's' : ''}
-              </p>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 gradient-primary rounded-xl flex items-center justify-center shadow-lg">
+                  <Video className="w-5 h-5 text-primary-foreground" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-foreground">Room: {roomId}</h1>
+                  <div className="flex items-center gap-2 text-sm">
+                    {isConnected ? (
+                      <Badge variant="outline" className="text-green-600 border-green-200">
+                        <Wifi className="w-3 h-3 mr-1" />
+                        Connected
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-red-600 border-red-200">
+                        <WifiOff className="w-3 h-3 mr-1" />
+                        Disconnected
+                      </Badge>
+                    )}
+                    <Badge variant="secondary">
+                      <Users className="w-3 h-3 mr-1" />
+                      {participants.length} participant{participants.length !== 1 ? 's' : ''}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="flex gap-2">
-              <button
+              <Button
                 onClick={copyRoomLink}
-                className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2"
               >
+                <Copy className="w-4 h-4" />
                 Copy Room Link
-              </button>
+              </Button>
+              <Button
+                onClick={() => navigator.clipboard.writeText(roomId || '')}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                <Share className="w-4 h-4" />
+                Copy Room Code
+              </Button>
               {hlsUrl && (
-                <button
+                <Button
                   onClick={copyHlsLink}
-                  className="px-4 py-2 text-sm bg-green-600 text-white rounded-md hover:bg-green-700"
+                  size="sm"
+                  className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
                 >
+                  <Share className="w-4 h-4" />
                   Copy Watch Link
-                </button>
+                </Button>
               )}
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 mx-4 mt-4 rounded">
-          {error}
+        <div className="container mx-auto px-4 pt-4">
+          <Card className="border-red-200 bg-red-50">
+            <CardContent className="flex items-center gap-3 pt-6">
+              <AlertCircle className="w-5 h-5 text-red-600" />
+              <p className="text-red-700">{error}</p>
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -390,123 +272,246 @@ export default function StreamPage() {
         <div className="grid lg:grid-cols-4 gap-6">
           {/* Main video area */}
           <div className="lg:col-span-3">
-            <div className="bg-white rounded-lg border shadow-sm p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold">Your Stream</h2>
-                <div className="flex gap-2">
-                  {!isStreaming ? (
-                    <button
-                      onClick={startStreaming}
-                      disabled={!isConnected}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+            <Card className="overflow-hidden shadow-lg">
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Video className="w-5 h-5 text-primary" />
+                    <CardTitle className="text-xl">Your Stream</CardTitle>
+                    {isStreaming && (
+                      <Badge className="bg-red-500 hover:bg-red-600 animate-pulse">
+                        <Radio className="w-3 h-3 mr-1" />
+                        LIVE
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    {!isStreaming ? (
+                      <Button
+                        onClick={startStreaming}
+                        disabled={!isConnected}
+                        className="gradient-primary shadow-glow"
+                      >
+                        <Play className="w-4 h-4 mr-2" />
+                        Start Streaming
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={stopStreaming}
+                        variant="destructive"
+                      >
+                        <Square className="w-4 h-4 mr-2" />
+                        Stop Streaming
+                      </Button>
+                    )}
+                    <Button
+                      onClick={toggleHLS}
+                      disabled={!isStreaming}
+                      variant={isHlsEnabled ? "default" : "outline"}
+                      className={isHlsEnabled ? "bg-green-600 hover:bg-green-700" : ""}
                     >
-                      Start Streaming
-                    </button>
-                  ) : (
-                    <button
-                      onClick={stopStreaming}
-                      className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-                    >
-                      Stop Streaming
-                    </button>
-                  )}
-                  <button
-                    onClick={toggleHLS}
-                    disabled={!isStreaming}
-                    className={`px-4 py-2 rounded-md disabled:opacity-50 ${
-                      isHlsEnabled
-                        ? 'bg-green-600 text-white hover:bg-green-700'
-                        : 'border border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    {isHlsEnabled ? 'Stop HLS' : 'Start HLS'}
-                  </button>
+                      <Radio className="w-4 h-4 mr-2" />
+                      {isHlsEnabled ? 'Stop HLS' : 'Start HLS'}
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              </CardHeader>
               
-              <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden">
-                <video
-                  ref={localVideoRef}
-                  autoPlay
-                  muted
-                  playsInline
-                  className="w-full h-full object-cover"
-                />
-                {!isStreaming && (
-                  <div className="flex items-center justify-center h-full text-gray-400">
-                    <div className="text-center">
-                      <div className="text-4xl mb-2">📹</div>
-                      <p>Click &quot;Start Streaming&quot; to begin</p>
+              <CardContent className="p-0">
+                <div className="aspect-video bg-black rounded-b-lg overflow-hidden relative">
+                  <video
+                    ref={localVideoRef}
+                    autoPlay
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                  {!isStreaming && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-muted/10 backdrop-blur-sm">
+                      <div className="text-center space-y-4">
+                        <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mx-auto">
+                          <Video className="w-8 h-8 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-lg font-medium text-foreground">Ready to stream</p>
+                          <p className="text-sm text-muted-foreground">Click &quot;Start Streaming&quot; to begin</p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-
-              {isStreaming && (
-                <div className="mt-4 flex gap-4 text-sm text-gray-600">
-                  <div className="flex items-center gap-1">
-                    <span className={mediaDevices.video ? 'text-green-600' : 'text-red-600'}>
-                      📹
-                    </span>
-                    Video: {mediaDevices.video ? 'On' : 'Off'}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className={mediaDevices.audio ? 'text-green-600' : 'text-red-600'}>
-                      🎤
-                    </span>
-                    Audio: {mediaDevices.audio ? 'On' : 'Off'}
-                  </div>
-                  {hlsUrl && (
-                    <div className="flex items-center gap-1">
-                      <span className="text-green-600">📡</span>
-                      HLS: Broadcasting
+                  )}
+                  
+                  {/* Stream controls overlay */}
+                  {isStreaming && (
+                    <div className="absolute bottom-4 left-4 right-4">
+                      <div className="glass-effect rounded-lg p-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4 text-sm">
+                            <div className="flex items-center gap-2">
+                              {mediaDevices.video ? (
+                                <Video className="w-4 h-4 text-green-400" />
+                              ) : (
+                                <VideoOff className="w-4 h-4 text-red-400" />
+                              )}
+                              <span className="text-white">Video: {mediaDevices.video ? 'On' : 'Off'}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {mediaDevices.audio ? (
+                                <Mic className="w-4 h-4 text-green-400" />
+                              ) : (
+                                <MicOff className="w-4 h-4 text-red-400" />
+                              )}
+                              <span className="text-white">Audio: {mediaDevices.audio ? 'On' : 'Off'}</span>
+                            </div>
+                            {hlsUrl && (
+                              <div className="flex items-center gap-2">
+                                <Radio className="w-4 h-4 text-green-400 animate-pulse" />
+                                <span className="text-white">HLS: Broadcasting</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
-              )}
-            </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Sidebar */}
           <div className="space-y-6">
             {/* Participants */}
-            <div className="bg-white rounded-lg border shadow-sm p-4">
-              <h3 className="font-semibold mb-3">Participants ({participants.length})</h3>
-              <div className="space-y-2">
+            <Card className="shadow-lg">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Users className="w-5 h-5 text-primary" />
+                  Participants ({participants.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
                 {participants.map((participant) => (
-                  <div key={participant.id} className="flex items-center gap-2 text-sm">
-                    <div className={`w-2 h-2 rounded-full ${
-                      participant.isStreaming ? 'bg-green-500' : 'bg-gray-300'
-                    }`} />
-                    <span className="truncate">{participant.userId}</span>
+                  <div key={participant.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="w-8 h-8">
+                        <AvatarFallback className="text-xs font-medium">
+                          {participant.userId.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="text-sm font-medium text-foreground truncate max-w-24">
+                          {participant.userId}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Joined {new Date(participant.joinedAt).toLocaleTimeString()}
+                        </p>
+                      </div>
+                    </div>
+                    {participant.isStreaming ? (
+                      <Badge className="bg-green-500 hover:bg-green-600 text-xs">
+                        <Radio className="w-3 h-3 mr-1" />
+                        Live
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-xs">
+                        Viewer
+                      </Badge>
+                    )}
                   </div>
                 ))}
                 {participants.length === 0 && (
-                  <p className="text-gray-500 text-sm">No participants yet</p>
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No participants yet</p>
+                    <p className="text-xs mt-1">Share the room link to invite others</p>
+                  </div>
                 )}
-              </div>
-            </div>
+              </CardContent>
+            </Card>
 
             {/* Stream info */}
-            <div className="bg-white rounded-lg border shadow-sm p-4">
-              <h3 className="font-semibold mb-3">Stream Info</h3>
-              <div className="space-y-2 text-sm">
+            <Card className="shadow-lg">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Settings className="w-5 h-5 text-primary" />
+                  Stream Info
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <div>
-                  <span className="text-gray-600">Room ID:</span>
-                  <div className="font-mono text-xs bg-gray-100 p-1 rounded mt-1">
-                    {roomId}
+                  <Label className="text-sm font-medium text-muted-foreground">Room ID</Label>
+                  <div className="mt-1 p-2 bg-muted/50 rounded-md border">
+                    <code className="text-sm font-mono text-foreground">{roomId}</code>
                   </div>
                 </div>
+                
                 {hlsUrl && (
-                  <div>
-                    <span className="text-gray-600">HLS URL:</span>
-                    <div className="font-mono text-xs bg-gray-100 p-1 rounded mt-1 break-all">
-                      {hlsUrl}
+                  <>
+                    <Separator />
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        <Radio className="w-4 h-4 text-green-500" />
+                        HLS Stream URL
+                      </Label>
+                      <div className="mt-1 p-2 bg-muted/50 rounded-md border max-h-20 overflow-y-auto">
+                        <code className="text-xs font-mono text-foreground break-all">{hlsUrl}</code>
+                      </div>
                     </div>
-                  </div>
+                  </>
                 )}
-              </div>
-            </div>
+                
+                {isStreaming && (
+                  <>
+                    <Separator />
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium text-muted-foreground">Stream Status</Label>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Video</span>
+                          <Badge variant={mediaDevices.video ? "default" : "secondary"} className="text-xs">
+                            {mediaDevices.video ? (
+                              <>
+                                <Video className="w-3 h-3 mr-1" />
+                                Active
+                              </>
+                            ) : (
+                              <>
+                                <VideoOff className="w-3 h-3 mr-1" />
+                                Inactive
+                              </>
+                            )}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Audio</span>
+                          <Badge variant={mediaDevices.audio ? "default" : "secondary"} className="text-xs">
+                            {mediaDevices.audio ? (
+                              <>
+                                <Mic className="w-3 h-3 mr-1" />
+                                Active
+                              </>
+                            ) : (
+                              <>
+                                <MicOff className="w-3 h-3 mr-1" />
+                                Inactive
+                              </>
+                            )}
+                          </Badge>
+                        </div>
+                        {hlsUrl && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">HLS</span>
+                            <Badge className="bg-green-500 hover:bg-green-600 text-xs animate-pulse">
+                              <Radio className="w-3 h-3 mr-1" />
+                              Broadcasting
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>
