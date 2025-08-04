@@ -27,7 +27,7 @@ A complete production-grade WebRTC to HLS streaming platform built with TypeScri
 
 ### Frontend
 - **Next.js 15.4.5** - React framework with App Router
-- **React 18.2.0** - UI library
+- **React 19** - UI library
 - **TypeScript** - Type-safe development
 - **Tailwind CSS** - Utility-first styling
 - **Socket.io Client** - Real-time communication
