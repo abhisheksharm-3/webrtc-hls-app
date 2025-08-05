@@ -14,7 +14,6 @@ import {
   Zap,
   Rocket,
   UserPlus,
-  Eye,
   Play,
   Globe,
   Shield,
@@ -22,7 +21,6 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { useState } from 'react';
-import Link from 'next/link';
 import Hyperspeed from '../ui/backgrounds/Hyperspeed/Hyperspeed';
 
 interface HeroSectionProps {
@@ -31,6 +29,30 @@ interface HeroSectionProps {
   roomId: string;
   setRoomId: (value: string) => void;
 }
+
+// A reusable component for the feature cards in the grid for cleaner code
+interface FeatureCardProps {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+  colorClass: string;
+}
+
+const FeatureCard = ({ icon, title, description, colorClass }: FeatureCardProps) => {
+  const IconComponent = icon;
+  return (
+    <div className="group text-center">
+      <div
+        className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-sm border border-white/10 transition-all duration-300 group-hover:scale-105 group-hover:border-white/20 group-hover:shadow-2xl ${colorClass}`}
+      >
+        <IconComponent className="h-7 w-7 transition-transform duration-300 group-hover:scale-110" />
+      </div>
+      <div className="text-base font-semibold text-foreground">{title}</div>
+      <div className="text-sm text-muted-foreground">{description}</div>
+    </div>
+  );
+};
+
 
 export function HeroSection({ onCreateRoom, onJoinRoom, roomId, setRoomId }: HeroSectionProps) {
   const [showJoinDialog, setShowJoinDialog] = useState(false);
@@ -48,10 +70,11 @@ export function HeroSection({ onCreateRoom, onJoinRoom, roomId, setRoomId }: Her
 
   return (
     <section className="relative min-h-screen overflow-hidden bg-background">
-      {/* Background Effects - Fixed positioning and improved colors */}
+      {/* Background Effects */}
       <div className="absolute inset-0 z-0">
         <Hyperspeed
           effectOptions={{
+            // Your Hyperspeed options remain the same
             onSpeedUp: () => { },
             onSlowDown: () => { },
             distortion: 'turbulentDistortion',
@@ -78,43 +101,35 @@ export function HeroSection({ onCreateRoom, onJoinRoom, roomId, setRoomId }: Her
             carShiftX: [-0.9, 0.9],
             carFloorSeparation: [0, 6],
             colors: {
-              // Using CSS custom properties for theme integration
-              roadColor: 0x0a0a0a,        // Darker road for contrast
-              islandColor: 0x171717,      // Slightly lighter for separation
-              background: 0x000000,       // Pure black background
-              shoulderLines: 0x3b82f6,    // Blue accent (matches primary)
-              brokenLines: 0x6366f1,      // Indigo variant
-              leftCars: [
-                0x3b82f6,  // Blue
-                0x8b5cf6,  // Purple
-                0x06b6d4,  // Cyan
-                0x10b981   // Emerald
-              ],
-              rightCars: [
-                0xf59e0b,  // Amber
-                0xef4444,  // Red
-                0xec4899,  // Pink
-                0x8b5cf6   // Purple
-              ],
-              sticks: 0x06b6d4,          // Cyan for side lights
-            }
+              roadColor: 0x0a0a0a,
+              islandColor: 0x171717,
+              background: 0x000000,
+              shoulderLines: 0x3b82f6,
+              brokenLines: 0x6366f1,
+              leftCars: [0x3b82f6, 0x8b5cf6, 0x06b6d4, 0x10b981],
+              rightCars: [0xf59e0b, 0xef4444, 0xec4899, 0x8b5cf6],
+              sticks: 0x06b6d4,
+            },
           }}
         />
       </div>
 
-      {/* Gradient Overlay for better text readability */}
-      <div className="absolute inset-0 z-10 bg-gradient-to-b from-background/20 via-background/40 to-background/80" />
+      {/* Improved Gradient Overlay for a vignette effect, focusing the user's eye */}
+      <div className="absolute inset-0 z-10 bg-[radial-gradient(ellipse_at_center,transparent_20%,theme(colors.background)_80%)]" />
 
       {/* Content */}
-      <div className="container relative z-20 flex min-h-screen items-center px-4 py-24 sm:py-32">
-        <div className="mx-auto max-w-4xl text-center">
+      <div className="container relative z-20 flex min-h-screen items-center px-4 py-28 md:px-8 sm:py-36">
+        <div className="mx-auto max-w-5xl text-center">
           {/* Badge */}
-          <Badge variant="secondary" className="mb-6 px-4 py-2 backdrop-blur-sm bg-background/80 border border-border/50">
-            <Zap className="mr-2 h-3 w-3" />
-            Real-time Streaming Technology
+          <Badge
+            variant="secondary"
+            className="mb-8 px-4 py-2 text-sm backdrop-blur-md bg-white/5 border border-white/10 shadow-lg"
+          >
+            <Zap className="mr-2 h-4 w-4 text-primary" />
+            Next-Gen Streaming Platform
           </Badge>
 
-          {/* Main Heading */}
+          {/* Main Heading with improved typography and contrast */}
           <h1 className="mb-6 text-4xl font-bold tracking-tight sm:text-6xl lg:text-7xl drop-shadow-lg">
             Stream Live with{' '}
             <span className="bg-gradient-to-r from-primary via-blue-500 to-purple-500 bg-clip-text text-transparent">
@@ -126,43 +141,42 @@ export function HeroSection({ onCreateRoom, onJoinRoom, roomId, setRoomId }: Her
             </span>
           </h1>
 
-          {/* Description */}
-          <p className="mx-auto mb-10 max-w-2xl text-lg text-muted-foreground sm:text-xl backdrop-blur-sm">
-            Experience ultra-low latency peer-to-peer communication with unlimited scalability. 
-            Start streaming instantly or broadcast to thousands with professional-grade technology.
+          {/* Description with more air */}
+          <p className="mx-auto mb-12 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
+            Experience ultra-low latency peer-to-peer communication with unlimited scalability. Start streaming or broadcast to thousands instantly.
           </p>
 
-          {/* CTA Buttons */}
-          <div className="mb-16 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-            <Button 
+          {/* Premium CTA Buttons */}
+          <div className="mb-24 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
+            <Button
               onClick={onCreateRoom}
               size="lg"
-              className="group h-12 px-8 text-base shadow-2xl backdrop-blur-sm bg-primary/90 hover:bg-primary transition-all hover:shadow-xl hover:scale-105"
+              className="group cursor-pointer h-14 w-full sm:w-auto px-8 text-lg font-semibold transition-all duration-300 ease-in-out bg-primary text-primary-foreground hover:bg-primary/90 hover:scale-105 shadow-[0_0_20px_theme(colors.primary/30%)] hover:shadow-[0_0_40px_theme(colors.primary/50%)]"
             >
-              <Rocket className="mr-2 h-5 w-5 transition-transform group-hover:scale-110" />
-              Start Streaming Now
-              <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+              <Rocket className="mr-3 h-6 w-6 transition-transform duration-300 group-hover:rotate-12" />
+              Start Streaming
+              <ArrowRight className="ml-3 h-5 w-5 transition-transform duration-300 group-hover:translate-x-1" />
             </Button>
-            
+
             <Dialog open={showJoinDialog} onOpenChange={setShowJoinDialog}>
               <DialogTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  size="lg" 
-                  className="h-12 px-8 text-base backdrop-blur-sm bg-background/50 border-border/50 hover:bg-background/80 hover:scale-105 transition-all"
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="h-14 cursor-pointer w-full sm:w-auto px-8 text-lg font-semibold transition-all duration-300 ease-in-out bg-white/5 border-white/10 text-foreground hover:bg-white/10 hover:border-white/20 hover:scale-105 backdrop-blur-md"
                 >
-                  <UserPlus className="mr-2 h-5 w-5" />
-                  Join with Room Code
+                  <UserPlus className="mr-3 h-6 w-6" />
+                  Join with Code
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px] backdrop-blur-sm bg-background/95 border-border/50">
+              <DialogContent className="sm:max-w-[425px] bg-background/80 border-border/30 backdrop-blur-xl">
                 <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
+                  <DialogTitle className="flex items-center gap-2 text-xl">
                     <UserPlus className="h-5 w-5 text-primary" />
                     Join a Stream Room
                   </DialogTitle>
                   <DialogDescription>
-                    Enter the room ID to join an existing streaming session. You can get this from the room creator.
+                    Enter the room ID provided by the creator to join the session.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
@@ -170,19 +184,19 @@ export function HeroSection({ onCreateRoom, onJoinRoom, roomId, setRoomId }: Her
                     <Label htmlFor="room-id">Room Code</Label>
                     <Input
                       id="room-id"
-                      placeholder="Enter room code (e.g., abc123xyz)"
+                      placeholder="e.g., abc-123-xyz"
                       value={roomId}
                       onChange={(e) => setRoomId(e.target.value)}
                       onKeyPress={handleKeyPress}
-                      className="bg-background/50 border-border/50 backdrop-blur-sm"
+                      className="h-12 bg-background/50 border-border/50 backdrop-blur-sm focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-0"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Room codes are typically 9 characters long and case-sensitive
+                      Room codes are case-sensitive.
                     </p>
                   </div>
                 </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setShowJoinDialog(false)}>
+                <div className="flex justify-end gap-3">
+                  <Button variant="ghost" onClick={() => setShowJoinDialog(false)}>
                     Cancel
                   </Button>
                   <Button onClick={handleJoinRoom} disabled={!roomId.trim()}>
@@ -192,49 +206,34 @@ export function HeroSection({ onCreateRoom, onJoinRoom, roomId, setRoomId }: Her
                 </div>
               </DialogContent>
             </Dialog>
-            
-            <Link href="/watch">
-              <Button 
-                variant="ghost" 
-                size="lg" 
-                className="h-12 px-8 text-base backdrop-blur-sm hover:bg-background/20 hover:scale-105 transition-all"
-              >
-                <Eye className="mr-2 h-5 w-5" />
-                Browse Live Streams
-              </Button>
-            </Link>
           </div>
 
-          {/* Stats Grid - Enhanced with glassmorphism */}
-          <div className="mx-auto grid max-w-3xl grid-cols-2 gap-6 md:grid-cols-4">
-            <div className="group text-center">
-              <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500/20 to-blue-600/30 backdrop-blur-sm border border-blue-500/20 transition-all group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-blue-500/25">
-                <Zap className="h-7 w-7 text-blue-400" />
-              </div>
-              <div className="text-sm font-semibold text-foreground">Ultra Low Latency</div>
-              <div className="text-xs text-muted-foreground">&lt; 100ms delay</div>
-            </div>
-            <div className="group text-center">
-              <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500/20 to-purple-600/30 backdrop-blur-sm border border-purple-500/20 transition-all group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-purple-500/25">
-                <Globe className="h-7 w-7 text-purple-400" />
-              </div>
-              <div className="text-sm font-semibold text-foreground">Unlimited Scale</div>
-              <div className="text-xs text-muted-foreground">∞ concurrent viewers</div>
-            </div>
-            <div className="group text-center">
-              <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/30 backdrop-blur-sm border border-emerald-500/20 transition-all group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-emerald-500/25">
-                <Shield className="h-7 w-7 text-emerald-400" />
-              </div>
-              <div className="text-sm font-semibold text-foreground">Enterprise Security</div>
-              <div className="text-xs text-muted-foreground">End-to-end encrypted</div>
-            </div>
-            <div className="group text-center">
-              <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500/20 to-orange-600/30 backdrop-blur-sm border border-orange-500/20 transition-all group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-orange-500/25">
-                <Smartphone className="h-7 w-7 text-orange-400" />
-              </div>
-              <div className="text-sm font-semibold text-foreground">Cross Platform</div>
-              <div className="text-xs text-muted-foreground">Any device, anywhere</div>
-            </div>
+          {/* Modernized Bento Grid for stats */}
+          <div className="mx-auto grid max-w-4xl grid-cols-2 gap-6 lg:grid-cols-4">
+            <FeatureCard
+              icon={Zap}
+              title="Low Latency"
+              description="< 100ms delay"
+              colorClass="text-blue-400 shadow-blue-500/20"
+            />
+            <FeatureCard
+              icon={Globe}
+              title="Unlimited Scale"
+              description="∞ concurrent viewers"
+              colorClass="text-purple-400 shadow-purple-500/20"
+            />
+            <FeatureCard
+              icon={Shield}
+              title="Secure"
+              description="End-to-end encrypted"
+              colorClass="text-emerald-400 shadow-emerald-500/20"
+            />
+            <FeatureCard
+              icon={Smartphone}
+              title="Cross Platform"
+              description="Any device, anywhere"
+              colorClass="text-orange-400 shadow-orange-500/20"
+            />
           </div>
         </div>
       </div>

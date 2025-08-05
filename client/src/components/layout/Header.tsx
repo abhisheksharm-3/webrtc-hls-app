@@ -4,47 +4,49 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
+// Define navigation links here to avoid repetition
+const navLinks = [
+  { href: '#features', label: 'Features' },
+  { href: '#how-it-works', label: 'How it Works' },
+  { href: '/watch', label: 'Watch Streams' },
+];
+
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 max-w-screen-2xl items-center justify-between px-4">
-        {/* Logo */}
-        <div className="flex items-center gap-3">
+      <div className="container flex h-20 max-w-screen-2xl items-center justify-between px-4">
+        {/* Logo and Brand Name */}
+        <Link href="/" className="flex items-center gap-3 group" onClick={() => setMobileMenuOpen(false)}>
           <div className="relative">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80 shadow-lg">
-              <Video className="h-5 w-5 text-primary-foreground" />
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80 shadow-lg transition-transform duration-300 group-hover:scale-105">
+              <Video className="h-6 w-6 text-primary-foreground" />
             </div>
-            <div className="absolute -right-1 -top-1 h-3 w-3 animate-pulse rounded-full border-2 border-background bg-emerald-500" />
+            {/* "Live" indicator */}
+            <div className="absolute -right-1 -top-1 flex h-4 w-4">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex h-4 w-4 rounded-full border-2 border-background bg-emerald-500"></span>
+            </div>
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight">WebRTC-HLS</h1>
-            <p className="text-xs text-muted-foreground">Live Streaming Platform</p>
+            <div className="text-xl font-bold tracking-tighter">Streamify</div>
+            <p className="text-xs text-muted-foreground">Next-Gen Streaming</p>
           </div>
-        </div>
+        </Link>
 
         {/* Desktop Navigation */}
-        <nav className="hidden items-center gap-8 md:flex">
-          <Link 
-            href="#features" 
-            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Features
-          </Link>
-          <Link 
-            href="#how-it-works" 
-            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            How it Works
-          </Link>
-          <Link 
-            href="/watch" 
-            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Watch Streams
-          </Link>
-          <Button size="sm" className="ml-4">
+        <nav className="hidden items-center gap-2 md:flex">
+          {navLinks.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-accent/50 rounded-md"
+            >
+              {link.label}
+            </Link>
+          ))}
+          <Button size="sm" className="ml-4 transition-all duration-300 ease-in-out shadow-[0_0_10px_theme(colors.primary/30%)] hover:shadow-[0_0_25px_theme(colors.primary/50%)]">
             Get Started
           </Button>
         </nav>
@@ -52,45 +54,40 @@ export function Header() {
         {/* Mobile Menu Button */}
         <Button
           variant="ghost"
-          size="sm"
+          size="icon"
           className="md:hidden"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
         >
-          {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          <span className="sr-only">Toggle menu</span>
+          {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </Button>
+      </div>
 
-        {/* Mobile Navigation */}
-        <div className={cn(
-          "absolute left-0 top-16 w-full border-b border-border bg-background/95 backdrop-blur md:hidden",
-          mobileMenuOpen ? "block" : "hidden"
-        )}>
-          <nav className="container flex flex-col gap-4 px-4 py-6">
-            <Link 
-              href="#features" 
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+      {/* Mobile Navigation Panel with smooth transitions */}
+      <div
+        className={cn(
+          "absolute left-0 w-full border-b border-border bg-background/95 backdrop-blur md:hidden transition-all duration-300 ease-in-out",
+          // Conditional classes for showing/hiding with animation
+          mobileMenuOpen
+            ? 'opacity-100 translate-y-0'
+            : 'opacity-0 -translate-y-4 pointer-events-none'
+        )}
+      >
+        <nav className="container flex flex-col gap-2 px-4 py-6">
+          {navLinks.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="px-4 py-3 text-base font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-accent/50 rounded-md"
               onClick={() => setMobileMenuOpen(false)}
             >
-              Features
+              {link.label}
             </Link>
-            <Link 
-              href="#how-it-works" 
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              How it Works
-            </Link>
-            <Link 
-              href="/watch" 
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Watch Streams
-            </Link>
-            <Button size="sm" className="mt-2 w-fit">
-              Get Started
-            </Button>
-          </nav>
-        </div>
+          ))}
+          <Button size="sm" className="mt-4 w-full">
+            Get Started
+          </Button>
+        </nav>
       </div>
     </header>
   );
