@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { Video, Menu, X } from "lucide-react";
 import { useState } from "react";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ModeToggle } from "../mode-toggle";
+import { cn } from "@/lib/utils";
 
 // Define navigation links here to avoid repetition
 const navLinks = [
