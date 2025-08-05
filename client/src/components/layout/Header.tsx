@@ -1,14 +1,15 @@
-import Link from 'next/link';
-import { Video, Menu, X } from 'lucide-react';
-import { useState } from 'react';
-import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
+import Link from "next/link";
+import { Video, Menu, X } from "lucide-react";
+import { useState } from "react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { ModeToggle } from "../mode-toggle";
 
 // Define navigation links here to avoid repetition
 const navLinks = [
-  { href: '#features', label: 'Features' },
-  { href: '#how-it-works', label: 'How it Works' },
-  { href: '/watch', label: 'Watch Streams' },
+  { href: "#features", label: "Features" },
+  { href: "#how-it-works", label: "How it Works" },
+  { href: "/watch", label: "Watch Streams" },
 ];
 
 export function Header() {
@@ -18,7 +19,11 @@ export function Header() {
     <header className="sticky top-0 z-50 w-full border-b border-border/20 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-20 max-w-screen-2xl items-center justify-between px-4">
         {/* Logo and Brand Name */}
-        <Link href="/" className="flex items-center gap-3 group" onClick={() => setMobileMenuOpen(false)}>
+        <Link
+          href="/"
+          className="flex items-center gap-3 group"
+          onClick={() => setMobileMenuOpen(false)}
+        >
           <div className="relative">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80 shadow-lg transition-transform duration-300 group-hover:scale-105">
               <Video className="h-6 w-6 text-primary-foreground" />
@@ -30,48 +35,62 @@ export function Header() {
             </div>
           </div>
           <div>
-            {/* Applying font-serif to the brand name for a logotype feel */}
-            <div className="font-serif text-2xl font-bold tracking-tight">Streamify</div>
+            <div className="font-serif text-2xl font-bold tracking-tight">
+              Streamify
+            </div>
             <p className="text-xs text-muted-foreground">Next-Gen Streaming</p>
           </div>
         </Link>
 
         {/* Desktop Navigation */}
-        <nav className="hidden items-center gap-2 md:flex">
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-accent/50 rounded-md"
-            >
-              {link.label}
-            </Link>
-          ))}
-          <Button size="sm" className="ml-4 transition-all duration-300 ease-in-out shadow-[0_0_10px_theme(colors.primary/30%)] hover:shadow-[0_0_25px_theme(colors.primary/50%)]">
+        <div className="hidden items-center gap-2 md:flex">
+          <nav className="items-center gap-2 md:flex">
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-accent/50 rounded-md"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+          <div className="w-px h-6 bg-border/50 mx-4"></div>
+          <Button
+            size="sm"
+            className="transition-all duration-300 ease-in-out shadow-[0_0_10px_theme(colors.primary/30%)] hover:shadow-[0_0_25px_theme(colors.primary/50%)]"
+          >
             Get Started
           </Button>
-        </nav>
+          <ModeToggle />
+        </div>
 
         {/* Mobile Menu Button */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="md:hidden"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-        >
-          <span className="sr-only">Toggle menu</span>
-          {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-        </Button>
+        <div className="flex items-center gap-2 md:hidden">
+          <ModeToggle />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="h-10 w-10 rounded-full"
+          >
+            <span className="sr-only">Toggle menu</span>
+            {mobileMenuOpen ? (
+              <X className="h-6 w-6" />
+            ) : (
+              <Menu className="h-6 w-6" />
+            )}
+          </Button>
+        </div>
       </div>
 
-      {/* Mobile Navigation Panel with smooth transitions */}
+      {/* Mobile Navigation Panel */}
       <div
         className={cn(
           "absolute left-0 w-full border-b border-border bg-background/95 backdrop-blur md:hidden transition-all duration-300 ease-in-out",
-          // Conditional classes for showing/hiding with animation
           mobileMenuOpen
-            ? 'opacity-100 translate-y-0'
-            : 'opacity-0 -translate-y-4 pointer-events-none'
+            ? "opacity-100 translate-y-0"
+            : "opacity-0 -translate-y-4 pointer-events-none"
         )}
       >
         <nav className="container flex flex-col gap-2 px-4 py-6">
@@ -85,9 +104,11 @@ export function Header() {
               {link.label}
             </Link>
           ))}
-          <Button size="sm" className="mt-4 w-full">
-            Get Started
-          </Button>
+          <div className="mt-4 border-t border-border/20 pt-6">
+            <Button size="lg" className="w-full">
+              Get Started
+            </Button>
+          </div>
         </nav>
       </div>
     </header>

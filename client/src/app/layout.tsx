@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Onest, Newsreader, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
+import { ThemeProvider } from "@/components/theme-provider";
 
 // 1. Define the fonts with their specific weights and CSS variables
 
@@ -48,9 +49,16 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       {/* 2. Apply all font variables to the body tag */}
-      <body className={`${onest.variable} ${newsreader.variable} ${ibmPlexMono.variable} font-sans antialiased min-h-screen bg-background text-foreground dark`}>
+      <body className={`${onest.variable} ${newsreader.variable} ${ibmPlexMono.variable} font-sans antialiased min-h-screen bg-background text-foreground`}>
         <div className="relative flex min-h-screen flex-col">
-          {children}
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            {children}
+          </ThemeProvider>
         </div>
       </body>
     </html>
