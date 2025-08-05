@@ -1,18 +1,38 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Onest, Newsreader, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({ 
+// 1. Define the fonts with their specific weights and CSS variables
+
+// Sans-serif for body text and general UI
+const onest = Onest({
   subsets: ["latin"],
   display: 'swap',
-  variable: '--font-inter'
+  variable: '--font-sans',
 });
 
+// Serif for major headings to add elegance and contrast
+const newsreader = Newsreader({
+  subsets: ["latin"],
+  display: 'swap',
+  weight: ["400", "500", "700"], // Include weights you'll use for headings
+  variable: '--font-serif',
+});
+
+// Monospaced for code, room IDs, or technical labels
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  display: 'swap',
+  weight: ["400", "500"],
+  variable: '--font-mono',
+});
+
+
 export const metadata: Metadata = {
-  title: "WebRTC-HLS | Professional Live Streaming Platform",
-  description: "Professional live streaming platform with ultra-low latency WebRTC and unlimited scalability through HLS technology. Perfect for creators and enterprises.",
-  keywords: ["webrtc", "hls", "live streaming", "broadcasting", "real-time", "video"],
-  authors: [{ name: "WebRTC-HLS Team" }],
+  title: "Streamify | Next-Gen WebRTC & HLS Streaming",
+  description: "Experience ultra-low latency streaming with Streamify. A professional platform leveraging WebRTC and HLS for unlimited scalability, perfect for creators and enterprises.",
+  keywords: ["webrtc", "hls", "live streaming", "streamify", "broadcasting", "real-time", "video"],
+  authors: [{ name: "Streamify" }],
   viewport: "width=device-width, initial-scale=1",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
@@ -27,7 +47,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans antialiased min-h-screen bg-background text-foreground dark`}>
+      {/* 2. Apply all font variables to the body tag */}
+      <body className={`${onest.variable} ${newsreader.variable} ${ibmPlexMono.variable} font-sans antialiased min-h-screen bg-background text-foreground dark`}>
         <div className="relative flex min-h-screen flex-col">
           {children}
         </div>

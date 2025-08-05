@@ -5,64 +5,67 @@ const steps = [
   {
     number: 1,
     title: 'Create or Join',
-    description: 'Create a new streaming room or join an existing one with a simple room ID. No registration or complex setup required.',
-    color: 'from-primary to-primary/80',
-    dotColor: 'bg-emerald-500',
+    description: 'Start a new streaming room or join an existing one with a simple room ID. No registration or complex setup required.',
   },
   {
     number: 2,
     title: 'Start Streaming',
     description: 'Allow camera and microphone access, then start streaming instantly with ultra-low latency WebRTC technology.',
-    color: 'from-purple-500 to-purple-600',
-    dotColor: 'bg-blue-500',
   },
   {
     number: 3,
     title: 'Scale with HLS',
     description: 'Enable HLS broadcasting for unlimited viewers or share the watch link for public streaming events and conferences.',
-    color: 'from-emerald-500 to-emerald-600',
-    dotColor: 'bg-orange-500',
   },
 ];
 
 export function HowItWorksSection() {
   return (
-    <section id="how-it-works" className="bg-muted/30 py-24">
+    <section id="how-it-works" className="relative border-t border-border/20 bg-background/50 py-24 sm:py-32">
+      {/* Subtle background glow for depth and consistency */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_center,rgba(var(--primary-rgb),0.05),transparent_70%)]"
+      ></div>
       <div className="container px-4">
         <div className="mx-auto max-w-2xl text-center">
-          <Badge variant="secondary" className="mb-4">
-            <Play className="mr-2 h-3 w-3" />
-            Process
-          </Badge>
-          <h2 className="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">
+          <Badge
+            variant="secondary"
+            className="mb-6 px-4 py-2 text-sm backdrop-blur-md bg-white/5 border border-white/10 shadow-lg"
+          >
+            <Play className="mr-2 h-4 w-4" />
             How It Works
+          </Badge>
+          {/* Applying font-serif to the section heading */}
+          <h2 className="mb-4 font-serif text-4xl font-bold tracking-tight sm:text-5xl">
+            Get Streaming in 3 Easy Steps
           </h2>
-          <p className="mb-16 text-lg text-muted-foreground">
-            Get started with professional live streaming in just three simple steps. 
-            No technical expertise required.
+          <p className="mb-16 text-lg text-muted-foreground max-w-xl mx-auto">
+            Our platform is designed for simplicity and power. Follow these steps to go live in minutes.
           </p>
         </div>
 
-        <div className="mx-auto grid max-w-4xl gap-12 md:grid-cols-3">
-          {steps.map((step, index) => (
-            <div key={index} className="group text-center">
-              <div className="relative mx-auto mb-6 w-20 h-20">
-                <div className={`flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br ${step.color} text-2xl font-bold text-white shadow-lg transition-transform group-hover:scale-105`}>
-                  {step.number}
-                </div>
-                <div className={`absolute -right-2 -top-2 h-6 w-6 rounded-full border-2 border-background ${step.dotColor}`} />
-              </div>
-              <h3 className="mb-3 text-xl font-semibold">{step.title}</h3>
-              <p className="leading-relaxed text-muted-foreground">
-                {step.description}
-              </p>
-            </div>
-          ))}
-        </div>
+        {/* Vertical Timeline */}
+        <div className="relative mx-auto max-w-2xl">
 
-        {/* Connection Lines for Desktop */}
-        <div className="relative mx-auto mt-12 hidden max-w-4xl md:block">
-          <div className="absolute left-1/6 top-0 h-px w-2/3 bg-gradient-to-r from-transparent via-border to-transparent" />
+          <div className="space-y-12">
+            {steps.map((step, index) => (
+              <div key={index} className="relative flex items-start gap-6 sm:gap-8">
+                {/* Step Number Circle */}
+                <div className="relative z-10 flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-background border-2 border-primary/50">
+                  <span className="font-mono text-lg font-semibold text-primary">{`0${step.number}`}</span>
+                </div>
+
+                {/* Step Content */}
+                <div className="flex-grow pt-1.5">
+                  <h3 className="text-xl font-semibold mb-2">{step.title}</h3>
+                  <p className="leading-relaxed text-muted-foreground">
+                    {step.description}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </section>

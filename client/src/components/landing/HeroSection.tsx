@@ -30,7 +30,6 @@ interface HeroSectionProps {
   setRoomId: (value: string) => void;
 }
 
-// A reusable component for the feature cards in the grid for cleaner code
 interface FeatureCardProps {
   icon: React.ElementType;
   title: string;
@@ -48,7 +47,8 @@ const FeatureCard = ({ icon, title, description, colorClass }: FeatureCardProps)
         <IconComponent className="h-7 w-7 transition-transform duration-300 group-hover:scale-110" />
       </div>
       <div className="text-base font-semibold text-foreground">{title}</div>
-      <div className="text-sm text-muted-foreground">{description}</div>
+      {/* Using font-mono for the technical description */}
+      <div className="font-mono text-xs uppercase tracking-wider text-muted-foreground">{description}</div>
     </div>
   );
 };
@@ -114,7 +114,7 @@ export function HeroSection({ onCreateRoom, onJoinRoom, roomId, setRoomId }: Her
         />
       </div>
 
-      {/* Improved Gradient Overlay for a vignette effect, focusing the user's eye */}
+      {/* Improved Gradient Overlay */}
       <div className="absolute inset-0 z-10 bg-[radial-gradient(ellipse_at_center,transparent_20%,theme(colors.background)_80%)]" />
 
       {/* Content */}
@@ -129,24 +129,21 @@ export function HeroSection({ onCreateRoom, onJoinRoom, roomId, setRoomId }: Her
             Next-Gen Streaming Platform
           </Badge>
 
-          {/* Main Heading with improved typography and contrast */}
-          <h1 className="mb-6 text-4xl font-bold tracking-tight sm:text-6xl lg:text-7xl drop-shadow-lg">
-            Stream Live with{' '}
-            <span className="bg-gradient-to-r from-primary via-blue-500 to-purple-500 bg-clip-text text-transparent">
-              Next-Gen
-            </span>
+          {/* Main Heading with Serif Font */}
+          <h1 className="mb-8 font-serif text-5xl font-bold tracking-tight sm:text-7xl lg:text-8xl">
+            <span className="text-muted-foreground/80">Stream Live with</span>
             <br />
-            <span className="bg-gradient-to-r from-cyan-400 via-blue-500 to-primary bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-primary via-blue-400 to-purple-500 bg-clip-text text-transparent">
               WebRTC & HLS
             </span>
           </h1>
 
-          {/* Description with more air */}
+          {/* Description */}
           <p className="mx-auto mb-12 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
             Experience ultra-low latency peer-to-peer communication with unlimited scalability. Start streaming or broadcast to thousands instantly.
           </p>
 
-          {/* Premium CTA Buttons */}
+          {/* CTA Buttons */}
           <div className="mb-24 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
             <Button
               onClick={onCreateRoom}
@@ -157,7 +154,6 @@ export function HeroSection({ onCreateRoom, onJoinRoom, roomId, setRoomId }: Her
               Start Streaming
               <ArrowRight className="ml-3 h-5 w-5 transition-transform duration-300 group-hover:translate-x-1" />
             </Button>
-
             <Dialog open={showJoinDialog} onOpenChange={setShowJoinDialog}>
               <DialogTrigger asChild>
                 <Button
@@ -181,7 +177,8 @@ export function HeroSection({ onCreateRoom, onJoinRoom, roomId, setRoomId }: Her
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="room-id">Room Code</Label>
+                    {/* Using font-mono for the technical label */}
+                    <Label htmlFor="room-id" className="font-mono text-sm">Room Code</Label>
                     <Input
                       id="room-id"
                       placeholder="e.g., abc-123-xyz"
@@ -190,7 +187,8 @@ export function HeroSection({ onCreateRoom, onJoinRoom, roomId, setRoomId }: Her
                       onKeyPress={handleKeyPress}
                       className="h-12 bg-background/50 border-border/50 backdrop-blur-sm focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-0"
                     />
-                    <p className="text-xs text-muted-foreground">
+                     {/* Using font-mono for the helper text */}
+                    <p className="text-xs text-muted-foreground font-mono">
                       Room codes are case-sensitive.
                     </p>
                   </div>
@@ -208,7 +206,7 @@ export function HeroSection({ onCreateRoom, onJoinRoom, roomId, setRoomId }: Her
             </Dialog>
           </div>
 
-          {/* Modernized Bento Grid for stats */}
+          {/* Modernized Bento Grid */}
           <div className="mx-auto grid max-w-4xl grid-cols-2 gap-6 lg:grid-cols-4">
             <FeatureCard
               icon={Zap}
@@ -219,19 +217,19 @@ export function HeroSection({ onCreateRoom, onJoinRoom, roomId, setRoomId }: Her
             <FeatureCard
               icon={Globe}
               title="Unlimited Scale"
-              description="∞ concurrent viewers"
+              description="∞ Viewers"
               colorClass="text-purple-400 shadow-purple-500/20"
             />
             <FeatureCard
               icon={Shield}
               title="Secure"
-              description="End-to-end encrypted"
+              description="E2E Encrypted"
               colorClass="text-emerald-400 shadow-emerald-500/20"
             />
             <FeatureCard
               icon={Smartphone}
               title="Cross Platform"
-              description="Any device, anywhere"
+              description="Any Device"
               colorClass="text-orange-400 shadow-orange-500/20"
             />
           </div>

@@ -15,7 +15,7 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 w-full border-b border-border/20 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-20 max-w-screen-2xl items-center justify-between px-4">
         {/* Logo and Brand Name */}
         <Link href="/" className="flex items-center gap-3 group" onClick={() => setMobileMenuOpen(false)}>
@@ -30,7 +30,8 @@ export function Header() {
             </div>
           </div>
           <div>
-            <div className="text-xl font-bold tracking-tighter">Streamify</div>
+            {/* Applying font-serif to the brand name for a logotype feel */}
+            <div className="font-serif text-2xl font-bold tracking-tight">Streamify</div>
             <p className="text-xs text-muted-foreground">Next-Gen Streaming</p>
           </div>
         </Link>
