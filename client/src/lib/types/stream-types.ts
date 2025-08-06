@@ -62,3 +62,19 @@ export interface WebRTCStreamHook {
     leaveRoom: () => void;
   };
 }
+
+export interface StreamMetadata {
+  id: string;
+  roomId: string;
+  hlsUrl: string;
+  title: string;
+  isLive: boolean;
+  viewers: number;
+  startedAt: Date;
+}
+export interface StreamPlayerProps {
+  currentStream: StreamMetadata;
+  allStreams: StreamMetadata[];
+  onSelectStream: (stream: StreamMetadata) => void;
+  onPlaybackError: (message: string) => void;
+}

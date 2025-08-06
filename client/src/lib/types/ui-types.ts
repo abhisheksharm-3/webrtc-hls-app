@@ -42,3 +42,11 @@ export interface StreamSidebarProps {
   onToggleHLS: () => void;
   onCopy: (text: string) => void;
 }
+
+export interface PlayerControlProps {
+  isPlaying: boolean;
+  isMuted: boolean;
+  onPlayPause: () => void;
+  onMuteToggle: () => void;
+  onFullscreen: () => void;
+}
