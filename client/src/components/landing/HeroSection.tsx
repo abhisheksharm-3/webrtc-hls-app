@@ -2,6 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   Dialog,
   DialogContent,
@@ -19,6 +20,8 @@ import {
   Shield,
   Smartphone,
   ArrowRight,
+  Users,
+  Eye,
 } from 'lucide-react';
 import { useState } from 'react';
 import Hyperspeed from '../ui/backgrounds/Hyperspeed/Hyperspeed';
@@ -26,6 +29,7 @@ import Hyperspeed from '../ui/backgrounds/Hyperspeed/Hyperspeed';
 interface HeroSectionProps {
   onCreateRoom: () => void;
   onJoinRoom: () => void;
+  onWatchRoom?: () => void;
   roomId: string;
   setRoomId: (value: string) => void;
 }
@@ -54,11 +58,16 @@ const FeatureCard = ({ icon, title, description, colorClass }: FeatureCardProps)
 };
 
 
-export function HeroSection({ onCreateRoom, onJoinRoom, roomId, setRoomId }: HeroSectionProps) {
+export function HeroSection({ onCreateRoom, onJoinRoom, onWatchRoom, roomId, setRoomId }: HeroSectionProps) {
   const [showJoinDialog, setShowJoinDialog] = useState(false);
+  const [joinMode, setJoinMode] = useState<'participate' | 'watch'>('participate');
 
   const handleJoinRoom = () => {
-    onJoinRoom();
+    if (joinMode === 'participate') {
+      onJoinRoom();
+    } else {
+      onWatchRoom?.();
+    }
     setShowJoinDialog(false);
   };
 
@@ -172,12 +181,11 @@ export function HeroSection({ onCreateRoom, onJoinRoom, roomId, setRoomId }: Her
                     Join a Stream Room
                   </DialogTitle>
                   <DialogDescription>
-                    Enter the room ID provided by the creator to join the session.
+                    Enter the room ID and choose how you want to join the session.
                   </DialogDescription>
                 </DialogHeader>
-                <div className="grid gap-4 py-4">
+                <div className="grid gap-6 py-4">
                   <div className="grid gap-2">
-                    {/* Using font-mono for the technical label */}
                     <Label htmlFor="room-id" className="font-mono text-sm">Room Code</Label>
                     <Input
                       id="room-id"
@@ -187,10 +195,32 @@ export function HeroSection({ onCreateRoom, onJoinRoom, roomId, setRoomId }: Her
                       onKeyPress={handleKeyPress}
                       className="h-12 bg-background/50 border-border/50 backdrop-blur-sm focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-0"
                     />
-                     {/* Using font-mono for the helper text */}
-                    <p className="text-xs text-muted-foreground font-mono">
-                      Room codes are case-sensitive.
-                    </p>
+                  </div>
+                  
+                  <div className="grid gap-3">
+                    <Label className="font-mono text-sm">Join Mode</Label>
+                    <RadioGroup value={joinMode} onValueChange={(value: string) => setJoinMode(value as 'participate' | 'watch')} className="grid gap-3">
+                      <div className="flex items-center space-x-2 p-3 rounded-lg border border-border/50 hover:border-border/80 transition-colors">
+                        <RadioGroupItem value="participate" id="participate" />
+                        <Label htmlFor="participate" className="flex-1 cursor-pointer">
+                          <div className="flex items-center gap-2">
+                            <Users className="h-4 w-4 text-primary" />
+                            <span className="font-semibold">Join as Guest</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">Participate in the conversation with video and audio</div>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2 p-3 rounded-lg border border-border/50 hover:border-border/80 transition-colors">
+                        <RadioGroupItem value="watch" id="watch" />
+                        <Label htmlFor="watch" className="flex-1 cursor-pointer">
+                          <div className="flex items-center gap-2">
+                            <Eye className="h-4 w-4 text-primary" />
+                            <span className="font-semibold">Watch Only</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">Watch the stream without participating</div>
+                        </Label>
+                      </div>
+                    </RadioGroup>
                   </div>
                 </div>
                 <div className="flex justify-end gap-3">

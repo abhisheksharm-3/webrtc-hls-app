@@ -29,13 +29,20 @@ export default function HomePage() {
   const handleCreateRoom = () => {
     const newRoomId = generateRoomId();
     // Redirect to stream page as host
-    window.location.href = `/stream?room=${newRoomId}`;
+    window.location.href = `/stream?room=${newRoomId}&role=host`;
   };
 
   const handleJoinRoom = () => {
     if (roomId.trim()) {
       // Redirect to stream page as guest
-      window.location.href = `/stream?room=${roomId.trim()}`;
+      window.location.href = `/stream?room=${roomId.trim()}&role=guest`;
+    }
+  };
+
+  const handleWatchRoom = () => {
+    if (roomId.trim()) {
+      // Redirect to watch page as viewer
+      window.location.href = `/watch?room=${roomId.trim()}`;
     }
   };
 
@@ -45,6 +52,7 @@ export default function HomePage() {
       <HeroSection 
         onCreateRoom={handleCreateRoom}
         onJoinRoom={handleJoinRoom}
+        onWatchRoom={handleWatchRoom}
         roomId={roomId}
         setRoomId={setRoomId}
       />
@@ -52,6 +60,7 @@ export default function HomePage() {
         roomId={roomId}
         setRoomId={setRoomId}
         onJoinRoom={handleJoinRoom}
+        onWatchRoom={handleWatchRoom}
       />
       <FeaturesSection />
       <HowItWorksSection />

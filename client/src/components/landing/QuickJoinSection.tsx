@@ -6,13 +6,18 @@ interface QuickJoinSectionProps {
   roomId: string;
   setRoomId: (value: string) => void;
   onJoinRoom: () => void;
+  onWatchRoom?: () => void;
 }
 
-export function QuickJoinSection({ roomId, setRoomId, onJoinRoom }: QuickJoinSectionProps) {
+export function QuickJoinSection({ roomId, setRoomId, onJoinRoom, onWatchRoom }: QuickJoinSectionProps) {
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       onJoinRoom();
     }
+  };
+
+  const handleWatchClick = () => {
+    onWatchRoom?.();
   };
 
   return (
@@ -38,27 +43,41 @@ export function QuickJoinSection({ roomId, setRoomId, onJoinRoom }: QuickJoinSec
             </div>
 
             {/* Cohesive Input and Button Group */}
-            <div className="flex w-full max-w-md items-center">
-              <Input
-                type="text"
-                placeholder="Enter room code..."
-                value={roomId}
-                onChange={(e) => setRoomId(e.target.value)}
-                onKeyPress={handleKeyPress}
-                // Applying font-mono to the input field itself
-                className="h-14 flex-1 rounded-r-none border-r-0 bg-white/5 text-base transition focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-0 font-mono"
-                aria-label="Room Code Input"
-              />
-              <Button
-                onClick={onJoinRoom}
-                disabled={!roomId.trim()}
-                size="lg"
-                className="group h-14 rounded-l-none px-6 text-base shadow-[0_0_15px_theme(colors.primary/30%)] transition-all duration-300 ease-in-out hover:shadow-[0_0_30px_theme(colors.primary/50%)]"
-                aria-label="Join Room"
-              >
-                Join
-                <ArrowRight className="ml-2 h-5 w-5 transition-transform duration-300 group-hover:translate-x-1" />
-              </Button>
+            <div className="flex w-full max-w-md flex-col gap-3 items-center">
+              <div className="flex w-full items-center">
+                <Input
+                  type="text"
+                  placeholder="Enter room code..."
+                  value={roomId}
+                  onChange={(e) => setRoomId(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  className="h-14 flex-1 rounded-r-none border-r-0 bg-white/5 text-base transition focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-0 font-mono"
+                  aria-label="Room Code Input"
+                />
+                <Button
+                  onClick={onJoinRoom}
+                  disabled={!roomId.trim()}
+                  size="lg"
+                  className="group h-14 rounded-l-none px-6 text-base shadow-[0_0_15px_theme(colors.primary/30%)] transition-all duration-300 ease-in-out hover:shadow-[0_0_30px_theme(colors.primary/50%)]"
+                  aria-label="Join Room"
+                >
+                  Join
+                  <ArrowRight className="ml-2 h-5 w-5 transition-transform duration-300 group-hover:translate-x-1" />
+                </Button>
+              </div>
+              
+              <div className="text-center">
+                <p className="text-sm text-muted-foreground mb-2">or</p>
+                <Button
+                  onClick={handleWatchClick}
+                  disabled={!roomId.trim()}
+                  variant="outline"
+                  size="sm"
+                  className="text-sm bg-white/5 border-white/10 hover:bg-white/10"
+                >
+                  Watch Only
+                </Button>
+              </div>
             </div>
 
             {/* Applying font-mono to the helper text */}

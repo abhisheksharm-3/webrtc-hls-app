@@ -68,10 +68,9 @@ const StreamCard = ({ stream, isSelected, onSelect, isDemo }: { stream: Stream, 
 
 
 export default function WatchPage() {
-  const searchParams = useSearchParams();
-  const streamUrl = searchParams.get('stream');
-  
-  const [streams, setStreams] = useState<Stream[]>([]);
+  const searchParams = useSearchParams();
+  const streamUrl = searchParams.get('stream');
+  const roomCode = searchParams.get('room');  const [streams, setStreams] = useState<Stream[]>([]);
   const [currentStream, setCurrentStream] = useState<Stream | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -96,11 +95,15 @@ export default function WatchPage() {
       setStreams([mockStream]);
       setCurrentStream(mockStream);
       initializeHlsPlayer(streamUrl);
+    } else if (roomCode) {
+      // Direct room join from URL
+      handleJoinWithCode(roomCode);
     } else {
       loadAvailableStreams();
     }
     return () => hls?.destroy();
-  }, [streamUrl, hls]);  const loadAvailableStreams = async () => { /* ... (logic remains the same) ... */ 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamUrl, roomCode]);  const loadAvailableStreams = async () => { /* ... (logic remains the same) ... */ 
     try {
       setIsLoading(true);
       const response = await fetch('/api/streams/live');
@@ -156,12 +159,13 @@ export default function WatchPage() {
     await initializeHlsPlayer(stream.hlsUrl);
   };
 
-  const handleJoinWithCode = async () => {
-    if (!joinCode.trim()) return;
+  const handleJoinWithCode = async (code?: string) => {
+    const roomCodeToUse = code || joinCode.trim();
+    if (!roomCodeToUse) return;
     setJoinError(null);
     try {
       // Try to find an active stream for this room code
-      const response = await fetch(`/api/streams/by-room/${joinCode.trim()}`);
+      const response = await fetch(`/api/streams/by-room/${roomCodeToUse}`);
       if (!response.ok) {
         throw new Error('No active stream found for this room code.');
       }
@@ -271,7 +275,7 @@ export default function WatchPage() {
                       </div>
                     </div>
                     <DialogFooter>
-                      <Button onClick={handleJoinWithCode} disabled={!joinCode.trim()}>Join Stream</Button>
+                      <Button onClick={() => handleJoinWithCode()} disabled={!joinCode.trim()}>Join Stream</Button>
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
