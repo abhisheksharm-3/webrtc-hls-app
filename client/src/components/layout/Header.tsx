@@ -17,7 +17,7 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/20 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-20 max-w-screen-2xl items-center justify-between px-4">
+      <div className="flex h-20 max-w-screen items-center justify-between px-4">
         {/* Logo and Brand Name */}
         <Link
           href="/"
@@ -93,7 +93,7 @@ export function Header() {
             : "opacity-0 -translate-y-4 pointer-events-none"
         )}
       >
-        <nav className="container flex flex-col gap-2 px-4 py-6">
+        <nav className="flex flex-col gap-2 px-4 py-6">
           {navLinks.map((link) => (
             <Link
               key={link.href}

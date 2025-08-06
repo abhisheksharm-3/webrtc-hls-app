@@ -90,19 +90,17 @@ export default function WatchPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    // ... (logic remains the same)
-    if (streamUrl) {
+  useEffect(() => {
+    if (streamUrl) {
       const mockStream: Stream = { id: 'direct', roomId: 'direct', hlsUrl: streamUrl, title: 'Direct HLS Stream', isLive: true, viewers: 1, startedAt: new Date() };
       setStreams([mockStream]);
-      selectStream(mockStream);
-    } else {
-      loadAvailableStreams();
-    }
-    return () => hls?.destroy();
-  }, [streamUrl]);
-
-  const loadAvailableStreams = async () => { /* ... (logic remains the same) ... */ 
+      setCurrentStream(mockStream);
+      initializeHlsPlayer(streamUrl);
+    } else {
+      loadAvailableStreams();
+    }
+    return () => hls?.destroy();
+  }, [streamUrl, hls]);  const loadAvailableStreams = async () => { /* ... (logic remains the same) ... */ 
     try {
       setIsLoading(true);
       const response = await fetch('/api/streams/live');
@@ -162,16 +160,17 @@ export default function WatchPage() {
     if (!joinCode.trim()) return;
     setJoinError(null);
     try {
-      const response = await fetch(`/api/streams/by-code/${joinCode.trim()}`);
+      // Try to find an active stream for this room code
+      const response = await fetch(`/api/streams/by-room/${joinCode.trim()}`);
       if (!response.ok) {
-        throw new Error('Stream not found or is not live.');
+        throw new Error('No active stream found for this room code.');
       }
       const stream: Stream = await response.json();
       selectStream(stream);
       setIsJoinDialogOpen(false);
       setJoinCode('');
     } catch (err) {
-      setJoinError('Stream not found or is not live. Please check the code.');
+      setJoinError('No active stream found for this room code. Make sure the streamers have started and enabled HLS.');
       console.error(err);
     }
   };

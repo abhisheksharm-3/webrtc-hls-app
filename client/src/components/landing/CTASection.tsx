@@ -20,7 +20,7 @@ export function CTASection({ onCreateRoom }: CTASectionProps) {
         aria-hidden="true"
         className="absolute inset-0 -z-20 bg-[radial-gradient(ellipse_at_center,rgba(var(--primary-rgb),0.05),transparent_70%)]"
       ></div>
-      <div className="container px-4">
+      <div className="px-4">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/10 via-background/80 to-background/80 backdrop-blur-xl border border-white/10 px-8 py-16 text-center sm:px-16">
           {/* Enhanced background effects */}
           <div className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 blur-3xl" aria-hidden="true">

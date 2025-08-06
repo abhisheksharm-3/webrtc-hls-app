@@ -118,7 +118,7 @@ export function HeroSection({ onCreateRoom, onJoinRoom, roomId, setRoomId }: Her
       <div className="absolute inset-0 z-10 bg-[radial-gradient(ellipse_at_center,transparent_20%,theme(colors.background)_80%)]" />
 
       {/* Content */}
-      <div className="container relative z-20 flex min-h-screen items-center px-4 py-28 md:px-8 sm:py-36">
+      <div className="relative z-20 flex min-h-screen items-center px-4 py-28 md:px-8 sm:py-36">
         <div className="mx-auto max-w-5xl text-center">
           {/* Badge */}
           <Badge

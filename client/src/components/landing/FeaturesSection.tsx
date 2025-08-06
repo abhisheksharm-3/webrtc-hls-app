@@ -63,7 +63,7 @@ export function FeaturesSection() {
         className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_center,rgba(var(--primary-rgb),0.05),transparent_70%)]"
       ></div>
 
-      <div className="container px-4">
+      <div className="px-4">
         <div className="mx-auto max-w-2xl text-center">
           <Badge
             variant="secondary"

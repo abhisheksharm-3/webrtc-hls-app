@@ -11,7 +11,7 @@ datasource db {
 }
 
 model Room {
-  id              String   @id @default(uuid())
+  id              String   @id
   name            String
   isActive        Boolean  @default(true)
   participantCount Int     @default(0)

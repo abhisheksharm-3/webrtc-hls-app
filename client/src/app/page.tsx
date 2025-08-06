@@ -13,17 +13,29 @@ export default function HomePage() {
   const [roomId, setRoomId] = useState('');
 
   const generateRoomId = () => {
-    return Math.random().toString(36).substr(2, 9);
+    // Generate a more user-friendly room ID
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    const segments = [];
+    for (let i = 0; i < 3; i++) {
+      let segment = '';
+      for (let j = 0; j < 3; j++) {
+        segment += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      segments.push(segment);
+    }
+    return segments.join('-');
   };
 
   const handleCreateRoom = () => {
     const newRoomId = generateRoomId();
+    // Redirect to stream page as host
     window.location.href = `/stream?room=${newRoomId}`;
   };
 
   const handleJoinRoom = () => {
     if (roomId.trim()) {
-      window.location.href = `/stream?room=${roomId}`;
+      // Redirect to stream page as guest
+      window.location.href = `/stream?room=${roomId.trim()}`;
     }
   };
 
