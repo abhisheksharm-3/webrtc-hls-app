@@ -55,4 +55,4 @@ prisma/migrations/
 
 # HLS files
 *.m3u8
-*.ts
+*.ts.segment
