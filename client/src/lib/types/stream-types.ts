@@ -1,0 +1,64 @@
+/**
+ * Represents a participant in the stream room.
+ * The server is the source of truth for these properties.
+ */
+export interface Participant {
+  id: string;          // Socket ID
+  isHost: boolean;
+  isViewer?: boolean;
+  // These properties should be derived from the presence of producers on the server
+  hasVideo: boolean;
+  hasAudio: boolean;
+  isStreaming: boolean;
+}
+
+/**
+ * Local media device on/off status.
+ */
+export interface MediaDeviceStatus {
+  video: boolean;
+  audio: boolean;
+}
+
+/**
+ * Holds the tracks for a remote participant's stream.
+ */
+export interface RemoteStream {
+  videoTrack?: MediaStreamTrack;
+  audioTrack?: MediaStreamTrack;
+}
+
+/**
+ * Socket event payloads for creating a transport.
+ */
+export interface TransportParams {
+  id: string;
+  iceParameters: object;
+  iceCandidates: object[];
+  dtlsParameters: object;
+}
+
+/**
+ * Main interface for the return value of our custom hook.
+ */
+export interface WebRTCStreamHook {
+  isConnected: boolean;
+  isStreaming: boolean;
+  error: string | null;
+  participants: Participant[];
+  selfId: string | undefined;
+  userRole: 'host' | 'guest' | 'viewer';
+  localVideoRef: React.RefObject<HTMLVideoElement>;
+  getRemoteVideoRef: (participantId: string) => (el: HTMLVideoElement | null) => void;
+  mediaDeviceStatus: MediaDeviceStatus;
+  hlsUrl: string | null;
+  isHlsEnabled: boolean;
+  actions: {
+    startStreaming: () => Promise<void>;
+    stopStreaming: () => void;
+    toggleMedia: (type: "video" | "audio") => void;
+    toggleHLS: () => void;
+    copyToClipboard: (text: string) => void;
+    leaveRoom: () => void;
+  };
+}
