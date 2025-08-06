@@ -1,13 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { io, Socket } from "socket.io-client";
 import { Device } from "mediasoup-client";
-import { RtpCapabilities } from "mediasoup-client/lib/RtpParameters";
-import { Transport } from "mediasoup-client/lib/Transport";
-import { Producer } from "mediasoup-client/lib/Producer";
-import { Consumer } from "mediasoup-client/lib/Consumer";
 
 // UI Components (assuming they are correct)
 import { Button } from "@/components/ui/button";
@@ -26,6 +23,7 @@ import {
   AlertCircle, Wifi, WifiOff, LogOut, Cast, Menu, X,
 } from "lucide-react";
 import Link from "next/link";
+import { Consumer, Producer, RtpCapabilities, Transport } from "mediasoup-client/types";
 
 // --- Type Definitions ---
 

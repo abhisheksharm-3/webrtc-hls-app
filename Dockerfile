@@ -1,19 +1,42 @@
 # Multi-stage build for WebRTC-HLS streaming platform
 
-# Build stage for client
-FROM node:18-alpine AS client-builder
-WORKDIR /app/client
-COPY client/package*.json ./
-RUN npm ci --only=production --legacy-peer-deps
-COPY client/ .
+# Build stage for shared dependencies
+FROM node:18-alpine AS shared-builder
+WORKDIR /app/shared
+COPY shared/package*.json ./
+RUN npm ci --only=production
+COPY shared/ .
 RUN npm run build
 
 # Build stage for server
 FROM node:18-alpine AS server-builder
+WORKDIR /app
+
+# Install system dependencies for mediasoup
+RUN apk add --no-cache python3 make g++
+
+# Copy shared module first
+COPY --from=shared-builder /app/shared ./shared
+
+# Install server dependencies
 WORKDIR /app/server
 COPY server/package*.json ./
 RUN npm ci --only=production
 COPY server/ .
+RUN npm run build
+
+# Build stage for client
+FROM node:18-alpine AS client-builder
+WORKDIR /app
+
+# Copy shared module
+COPY --from=shared-builder /app/shared ./shared
+
+# Install client dependencies and build
+WORKDIR /app/client
+COPY client/package*.json ./
+RUN npm ci --only=production
+COPY client/ .
 RUN npm run build
 
 # Production stage
@@ -25,40 +48,41 @@ RUN apk add --no-cache \
     make \
     g++ \
     ffmpeg \
+    postgresql-client \
     libc6-compat
 
 WORKDIR /app
 
-# Copy built applications
-COPY --from=client-builder /app/client/.next ./client/.next
-COPY --from=client-builder /app/client/public ./client/public
-COPY --from=client-builder /app/client/package*.json ./client/
-COPY --from=client-builder /app/client/next.config.js ./client/
+# Copy shared module
+COPY --from=shared-builder /app/shared ./shared
 
+# Copy built server
 COPY --from=server-builder /app/server/dist ./server/dist
 COPY --from=server-builder /app/server/node_modules ./server/node_modules
 COPY --from=server-builder /app/server/package*.json ./server/
 COPY --from=server-builder /app/server/prisma ./server/prisma
 
-# Copy shared types
-COPY shared/ ./shared/
+# Copy built client
+COPY --from=client-builder /app/client/.next ./client/.next
+COPY --from=client-builder /app/client/public ./client/public
+COPY --from=client-builder /app/client/package*.json ./client/
+COPY --from=client-builder /app/client/next.config.ts ./client/
+COPY --from=client-builder /app/client/node_modules ./client/node_modules
 
 # Copy root package.json for scripts
 COPY package*.json ./
-
-# Install production dependencies for client
-WORKDIR /app/client
-RUN npm ci --only=production --legacy-peer-deps
-
-# Set working directory back to root
-WORKDIR /app
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
 
 # Create necessary directories with proper permissions
-RUN mkdir -p /app/server/hls /app/server/recordings /app/server/uploads && \
+RUN mkdir -p /app/server/storage/hls /app/server/logs && \
     chown -R nextjs:nodejs /app
+
+# Copy startup script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh && \
+    chown nextjs:nodejs /usr/local/bin/docker-entrypoint.sh
 
 USER nextjs
 
@@ -66,8 +90,9 @@ USER nextjs
 EXPOSE 3000 3001
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3001/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3001/health || exit 1
 
-# Start both applications
+# Start applications
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["npm", "start"]

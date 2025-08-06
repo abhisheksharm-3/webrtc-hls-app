@@ -56,6 +56,37 @@ A complete production-grade WebRTC to HLS streaming platform built with TypeScri
 - Docker and Docker Compose
 - FFmpeg (for HLS transcoding)
 
+### Docker Deployment (Recommended)
+
+1. **Clone and Setup**
+```bash
+git clone <repository-url>
+cd webrtc-hls
+cp .env.example .env
+# Edit .env with your configuration
+```
+
+2. **Start with Docker Compose**
+```bash
+# Development environment
+docker-compose up --build
+
+# Production environment  
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+
+# Or use the Makefile for easier commands
+make install  # First-time setup
+make dev      # Development mode
+make prod     # Production mode
+```
+
+3. **Access the Application**
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:3001
+- Health Check: http://localhost:3001/health
+
+For detailed Docker deployment instructions, see [DOCKER_DEPLOYMENT.md](./DOCKER_DEPLOYMENT.md).
+
 ### Development Setup
 
 1. **Clone and Install Dependencies**
@@ -107,7 +138,7 @@ npm start
 
 ## Architecture
 
-- **Client**: Next.js 14 with TypeScript, Tailwind CSS, and Shadcn/ui
+- **Client**: Next.js 15 with TypeScript, Tailwind CSS, and Shadcn/ui
 - **Server**: Express.js with Socket.io, Mediasoup SFU, and FFmpeg
 - **Database**: PostgreSQL with Prisma ORM
 - **Cache**: Redis for session management

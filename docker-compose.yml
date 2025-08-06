@@ -46,6 +46,11 @@ services:
     environment:
       # Database
       DATABASE_URL: "postgresql://webrtc_user:webrtc_password@postgres:5432/webrtc_hls"
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: webrtc_user
+      DB_PASSWORD: webrtc_password
+      DB_NAME: webrtc_hls
       # Redis
       REDIS_URL: "redis://redis:6379"
       # Server configuration
@@ -57,9 +62,11 @@ services:
       MEDIASOUP_MIN_PORT: 40000
       MEDIASOUP_MAX_PORT: 49999
       # HLS configuration
+      HLS_STORAGE_PATH: "/app/server/storage/hls"
       HLS_SEGMENT_DURATION: 4
       HLS_PLAYLIST_SIZE: 5
       FFMPEG_PATH: "/usr/bin/ffmpeg"
+      ALLOWED_ORIGINS: "http://localhost:3000"
       # Client configuration
       NEXT_PUBLIC_SERVER_URL: "http://localhost:3001"
       NEXT_PUBLIC_WS_URL: "ws://localhost:3001"
@@ -68,8 +75,8 @@ services:
       - "3001:3001"  # Express server
       - "40000-49999:40000-49999/udp"  # Mediasoup RTC ports
     volumes:
-      - hls_data:/app/server/hls
-      - recordings_data:/app/server/recordings
+      - hls_data:/app/server/storage/hls
+      - logs_data:/app/server/logs
     depends_on:
       postgres:
         condition: service_healthy
@@ -86,7 +93,7 @@ volumes:
     driver: local
   hls_data:
     driver: local
-  recordings_data:
+  logs_data:
     driver: local
 
 networks:
