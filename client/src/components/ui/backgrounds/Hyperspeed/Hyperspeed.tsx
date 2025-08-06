@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /*
 	Installed from https://reactbits.dev/ts/tailwind/
 */
@@ -575,7 +576,7 @@ class CarLights {
       ),
     });
 
-    material.onBeforeCompile = (shader) => {
+    material.onBeforeCompile = (shader: { vertexShader: string; }) => {
       shader.vertexShader = shader.vertexShader.replace(
         "#include <getDistortion_vertex>",
         typeof this.options.distortion === "object"
@@ -720,7 +721,7 @@ class LightsSticks {
       ),
     });
 
-    material.onBeforeCompile = (shader) => {
+    material.onBeforeCompile = (shader: { vertexShader: string; }) => {
       shader.vertexShader = shader.vertexShader.replace(
         "#include <getDistortion_vertex>",
         typeof this.options.distortion === "object"
@@ -862,7 +863,7 @@ class Road {
       ),
     });
 
-    material.onBeforeCompile = (shader) => {
+    material.onBeforeCompile = (shader: { vertexShader: string; }) => {
       shader.vertexShader = shader.vertexShader.replace(
         "#include <getDistortion_vertex>",
         typeof this.options.distortion === "object"
