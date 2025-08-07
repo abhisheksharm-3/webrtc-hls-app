@@ -1,196 +1,89 @@
+/**
+ * @file Manages the lifecycle of participants.
+ */
 import prisma from '../config/database';
+import { LiveRoom } from '../models/Room';
+import { LiveParticipant } from '../models/Participant';
 import { logger } from '../utils/logger';
-import type { Participant, ParticipantUpdate } from '../models/Participant';
+import { getAllLiveRooms, getLiveRoom } from './RoomService';
 
-export class ParticipantService {
-  private static instance: ParticipantService;
+const liveParticipants = new Map<string, LiveParticipant>();
 
-  public static getInstance(): ParticipantService {
-    if (!ParticipantService.instance) {
-      ParticipantService.instance = new ParticipantService();
+export function getLiveParticipant(socketId: string): LiveParticipant | undefined {
+  return liveParticipants.get(socketId);
+}
+
+/**
+ * Checks if a user with a given role is allowed to join a room.
+ * @param room The LiveRoom instance.
+ * @param role The desired role ('host', 'guest', 'viewer').
+ * @returns An error message string if not allowed, otherwise null.
+ */
+export function canJoinRoom(room: LiveRoom, role: 'host' | 'guest' | 'viewer'): string | null {
+    if (role === 'viewer') {
+        return null; // Viewers can always join.
     }
-    return ParticipantService.instance;
-  }
 
-  async createParticipant(data: {
-    roomId: string;
-    socketId: string;
-    isHost?: boolean;
-    isViewer?: boolean;
-  }): Promise<Participant> {
-    try {
-      const participantData = await prisma.participant.create({
-        data: {
-          roomId: data.roomId,
-          socketId: data.socketId,
-          isHost: data.isHost || false,
-          isStreaming: false,
-          hasVideo: false,
-          hasAudio: false,
-        },
-      });
-
-      const participant: Participant = {
-        id: participantData.id,
-        roomId: participantData.roomId,
-        socketId: participantData.socketId,
-        isHost: participantData.isHost,
-        isViewer: data.isViewer || false,
-        isStreaming: participantData.isStreaming,
-        hasVideo: participantData.hasVideo,
-        hasAudio: participantData.hasAudio,
-        joinedAt: participantData.joinedAt,
-      };
-
-      logger.info(`Participant created: ${participant.id} in room ${participant.roomId} as ${participant.isHost ? 'host' : participant.isViewer ? 'viewer' : 'guest'}`);
-      return participant;
-    } catch (error) {
-      logger.error('Error creating participant:', error);
-      throw new Error('Failed to create participant');
+    const participants = Array.from(room.participants.values());
+    
+    if (role === 'host') {
+        const hasHost = participants.some(p => p.isHost);
+        if (hasHost) {
+            return 'This room already has a host.';
+        }
     }
-  }
 
-  async getParticipantById(participantId: string): Promise<Participant | null> {
-    try {
-      const participantData = await prisma.participant.findUnique({
-        where: { id: participantId },
-      });
-
-      if (!participantData) return null;
-
-      return {
-        id: participantData.id,
-        roomId: participantData.roomId,
-        socketId: participantData.socketId,
-        isHost: participantData.isHost,
-        isViewer: false, // Default for existing participants
-        isStreaming: participantData.isStreaming,
-        hasVideo: participantData.hasVideo,
-        hasAudio: participantData.hasAudio,
-        joinedAt: participantData.joinedAt,
-      };
-    } catch (error) {
-      logger.error('Error getting participant:', error);
-      return null;
+    if (role === 'guest') {
+        // Count only host and guests, not viewers.
+        const streamerCount = participants.filter(p => !p.isViewer).length;
+        if (streamerCount >= 2) {
+            return 'Room is full for streamers (host + 1 guest). You can join as a viewer.';
+        }
     }
-  }
 
-  async getParticipantBySocketId(socketId: string): Promise<Participant | null> {
-    try {
-      const participantData = await prisma.participant.findUnique({
-        where: { socketId },
-      });
+    return null; // Allowed to join.
+}
 
-      if (!participantData) return null;
+export async function addParticipantToRoom(
+  room: LiveRoom,
+  socketId: string,
+  name: string,
+  isHost: boolean,
+  isViewer: boolean
+): Promise<LiveParticipant> {
+  const dbRecord = await prisma.participant.create({
+    data: { name, socketId, isHost, isViewer, roomId: room.id },
+  });
 
-      return {
-        id: participantData.id,
-        roomId: participantData.roomId,
-        socketId: participantData.socketId,
-        isHost: participantData.isHost,
-        isViewer: false, // Default for existing participants
-        isStreaming: participantData.isStreaming,
-        hasVideo: participantData.hasVideo,
-        hasAudio: participantData.hasAudio,
-        joinedAt: participantData.joinedAt,
-      };
-    } catch (error) {
-      logger.error('Error getting participant by socket ID:', error);
-      return null;
-    }
-  }
+  const liveParticipant = new LiveParticipant(dbRecord.id, socketId, room.id, name, isHost, isViewer);
 
-  async getParticipantsByRoomId(roomId: string): Promise<Participant[]> {
-    try {
-      const participantsData = await prisma.participant.findMany({
-        where: { roomId },
-        orderBy: { joinedAt: 'asc' },
-      });
+  room.addParticipant(liveParticipant);
+  liveParticipants.set(socketId, liveParticipant);
 
-      return participantsData.map(participantData => ({
-        id: participantData.id,
-        roomId: participantData.roomId,
-        socketId: participantData.socketId,
-        isHost: participantData.isHost,
-        isViewer: false, // Default for existing participants
-        isStreaming: participantData.isStreaming,
-        hasVideo: participantData.hasVideo,
-        hasAudio: participantData.hasAudio,
-        joinedAt: participantData.joinedAt,
-      }));
-    } catch (error) {
-      logger.error('Error getting participants by room ID:', error);
-      return [];
-    }
-  }
+  logger.info(`Participant joined | name: ${name}, id: ${dbRecord.id}, room: ${room.id}`);
+  return liveParticipant;
+}
 
-  async updateParticipant(
-    participantId: string,
-    updates: ParticipantUpdate
-  ): Promise<Participant | null> {
-    try {
-      const participantData = await prisma.participant.update({
-        where: { id: participantId },
-        data: updates,
-      });
+export async function removeParticipant(socketId: string): Promise<void> {
+  const participant = liveParticipants.get(socketId);
+  if (!participant) return;
 
-      return {
-        id: participantData.id,
-        roomId: participantData.roomId,
-        socketId: participantData.socketId,
-        isHost: participantData.isHost,
-        isViewer: false, // Default for existing participants
-        isStreaming: participantData.isStreaming,
-        hasVideo: participantData.hasVideo,
-        hasAudio: participantData.hasAudio,
-        joinedAt: participantData.joinedAt,
-      };
-    } catch (error) {
-      logger.error('Error updating participant:', error);
-      return null;
-    }
-  }
+  // 1. Instantly find the room using the stored roomId. No searching!
+  const room = getLiveRoom(participant.roomId);
 
-  async removeParticipant(participantId: string): Promise<boolean> {
-    try {
-      await prisma.participant.delete({
-        where: { id: participantId },
-      });
+  // 2. Close Mediasoup resources.
+  participant.close();
+  
+  // 3. Remove from the live room's state.
+  room?.removeParticipant(socketId);
+  
+  // 4. Remove from this service's global map.
+  liveParticipants.delete(socketId);
+  
+  // 5. Delete from the database.
+  await prisma.participant.delete({ where: { id: participant.id } }).catch((err: Error) => {
+    logger.error(`Failed to delete participant from DB | id: ${participant.id}`, err);
+  });
 
-      logger.info(`Participant removed: ${participantId}`);
-      return true;
-    } catch (error) {
-      logger.error('Error removing participant:', error);
-      return false;
-    }
-  }
-
-  async removeParticipantBySocketId(socketId: string): Promise<boolean> {
-    try {
-      await prisma.participant.delete({
-        where: { socketId },
-      });
-
-      logger.info(`Participant removed by socket ID: ${socketId}`);
-      return true;
-    } catch (error) {
-      logger.error('Error removing participant by socket ID:', error);
-      return false;
-    }
-  }
-
-  async updateRoomParticipantCount(roomId: string): Promise<void> {
-    try {
-      const count = await prisma.participant.count({
-        where: { roomId },
-      });
-
-      await prisma.room.update({
-        where: { id: roomId },
-        data: { participantCount: count },
-      });
-    } catch (error) {
-      logger.error('Error updating room participant count:', error);
-    }
-  }
+  logger.info(`Participant left | name: ${participant.name}, id: ${participant.id}`);
 }

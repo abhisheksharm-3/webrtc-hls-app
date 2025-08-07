@@ -1,37 +1,14 @@
+/**
+ * Shape of the request body for creating a new room.
+ */
 export interface CreateRoomRequest {
   name: string;
 }
 
+/**
+ * Shape of the response after successfully creating a room.
+ */
 export interface CreateRoomResponse {
-  id: string;
-  name: string;
-  isActive: boolean;
-  participantCount: number;
-  createdAt: string;
-}
-
-export interface GetRoomsResponse {
-  rooms: {
-    id: string;
-    name: string;
-    isActive: boolean;
-    participantCount: number;
-    createdAt: string;
-  }[];
-}
-
-export interface GetRoomResponse {
-  id: string;
-  name: string;
-  isActive: boolean;
-  participantCount: number;
-  hlsUrl?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ApiError {
-  error: string;
-  message: string;
-  statusCode: number;
+  roomId: string;
+  hlsUrl: string;
 }

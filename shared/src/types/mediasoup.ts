@@ -1,30 +1,17 @@
-import { types as mediasoupTypes } from 'mediasoup-client';
+import { types as mediasoupTypes } from 'mediasoup';
+/**
+ * This file contains shared TypeScript types related to Mediasoup entities.
+ * These types can be used by both the server and client applications.
+ */
 
-export interface MediasoupDevice {
-  loaded: boolean;
-  rtpCapabilities?: mediasoupTypes.RtpCapabilities;
-}
-
-export interface MediasoupTransport {
+/**
+ * Represents the parameters required by a client to establish a
+ * WebRTC transport connection with the Mediasoup server.
+ * This object is sent from the server to the client upon transport creation.
+ */
+export interface WebRtcTransportParams {
   id: string;
-  direction: 'send' | 'recv';
-  transport?: mediasoupTypes.Transport;
-  producers: Map<string, mediasoupTypes.Producer>;
-  consumers: Map<string, mediasoupTypes.Consumer>;
-}
-
-export interface ProducerOptions {
-  kind: 'audio' | 'video';
-  track: MediaStreamTrack;
-  codecOptions?: mediasoupTypes.ProducerCodecOptions;
-  encodings?: mediasoupTypes.RtpEncodingParameters[];
-  appData?: any;
-}
-
-export interface ConsumerOptions {
-  id: string;
-  producerId: string;
-  kind: 'audio' | 'video';
-  rtpParameters: mediasoupTypes.RtpParameters;
-  appData?: any;
+  iceParameters: mediasoupTypes.IceParameters;
+  iceCandidates: mediasoupTypes.IceCandidate[];
+  dtlsParameters: mediasoupTypes.DtlsParameters;
 }

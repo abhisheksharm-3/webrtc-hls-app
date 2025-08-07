@@ -1,113 +1,93 @@
+/**
+ * @file Defines API routes for room management (CRUD).
+ */
 import { Router, Request, Response } from 'express';
-import { RoomService } from '../services/RoomService';
-import { createRoomSchema } from '../utils/validation';
 import { logger } from '../utils/logger';
+import { closeRoom, findOrCreateLiveRoom, getAllRoomsFromDb, getRoomFromDb } from '../services/RoomService';
+// import { createRoomSchema } from '../utils/validation';
 
 const router = Router();
-const roomService = RoomService.getInstance();
 
-// GET /api/rooms - Get all rooms
+/**
+ * @route GET /api/rooms
+ * @description Retrieves a list of all rooms from the database.
+ */
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const rooms = await roomService.getAllRooms();
-    res.json({
-      rooms: rooms.map(room => ({
-        id: room.id,
-        name: room.name,
-        isActive: room.isActive,
-        participantCount: room.participantCount,
-        createdAt: room.createdAt.toISOString(),
-      })),
-    });
+    const rooms = await getAllRoomsFromDb(); // A new function we'd add
+    res.status(200).json({ rooms });
   } catch (error) {
     logger.error('Error getting rooms:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to get rooms',
-    });
+    res.status(500).json({ message: 'Failed to get rooms.' });
   }
 });
 
-// POST /api/rooms - Create a new room
+/**
+ * @route POST /api/rooms
+ * @description Creates a new room, making it "live" and ready for participants.
+ */
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const validationResult = createRoomSchema.safeParse(req.body);
-    if (!validationResult.success) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Invalid request data',
-        details: validationResult.error.errors,
-      });
+    // const { name } = createRoomSchema.parse(req.body);
+    const { name } = req.body;
+
+    // This service function now handles creating the DB record AND the live Mediasoup router.
+    const liveRoom = await findOrCreateLiveRoom(name);
+
+    if (!liveRoom) {
+      return res.status(500).json({ message: 'Failed to create live room.' });
     }
 
-    const room = await roomService.createRoom(validationResult.data);
-    res.status(201).json({
-      id: room.id,
-      name: room.name,
-      isActive: room.isActive,
-      participantCount: room.participantCount,
-      createdAt: room.createdAt.toISOString(),
-    });
+    const dbRoom = await getRoomFromDb(liveRoom.id);
+
+    if (!dbRoom) {
+      return res.status(500).json({ message: 'Failed to load room data from database.' });
+    }
+
+    // Return a plain data object representing the new room.
+    res.status(201).json(liveRoom.toPlainObject(dbRoom));
+
   } catch (error) {
     logger.error('Error creating room:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to create room',
-    });
+    res.status(500).json({ message: 'Failed to create room.' });
   }
 });
 
-// GET /api/rooms/:roomId - Get room details
+/**
+ * @route GET /api/rooms/:roomId
+ * @description Gets details for a specific room from the database.
+ */
 router.get('/:roomId', async (req: Request, res: Response) => {
   try {
     const { roomId } = req.params;
-    const room = await roomService.getRoomById(roomId);
+    const room = await getRoomFromDb(roomId);
     
     if (!room) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Room not found',
-      });
+      return res.status(404).json({ message: 'Room not found.' });
     }
 
-    res.json({
-      id: room.id,
-      name: room.name,
-      isActive: room.isActive,
-      participantCount: room.participantCount,
-      hlsUrl: room.hlsUrl,
-      createdAt: room.createdAt.toISOString(),
-      updatedAt: room.updatedAt.toISOString(),
-    });
+    res.status(200).json(room);
   } catch (error) {
-    logger.error('Error getting room:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to get room',
-    });
+    logger.error(`Error getting room ${req.params.roomId}:`, error);
+    res.status(500).json({ message: 'Failed to get room details.' });
   }
 });
 
-// DELETE /api/rooms/:roomId - Delete room
+/**
+ * @route DELETE /api/rooms/:roomId
+ * @description Closes a live room session and marks it as inactive.
+ */
 router.delete('/:roomId', async (req: Request, res: Response) => {
   try {
     const { roomId } = req.params;
-    const success = await roomService.deleteRoom(roomId);
     
-    if (!success) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Room not found',
-      });
-    }
-
-    res.status(204).send();
+    // This service function now handles closing Mediasoup resources AND updating the DB.
+    await closeRoom(roomId);
+    
+    res.status(204).send(); // 204 No Content is standard for a successful DELETE.
   } catch (error) {
-    logger.error('Error deleting room:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to delete room',
-    });
+    logger.error(`Error deleting room ${req.params.roomId}:`, error);
+    res.status(500).json({ message: 'Failed to delete room.' });
   }
 });
 

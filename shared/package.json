@@ -1,15 +1,15 @@
 {
-  "name": "webrtc-hls-shared",
+  "name": "shared",
   "version": "1.0.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "prepublish": "npm run build"
   },
   "dependencies": {
-    "zod": "^3.21.4"
-    
+    "mediasoup": "^3.18.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "typescript": "^5.1.6"

@@ -1,327 +1,105 @@
+/**
+ * @file Registers all room-related event handlers for a socket connection.
+ * This includes joining, leaving, and managing basic participant states.
+ */
 import { Socket, Server } from 'socket.io';
-import { RoomService } from '../../services/RoomService';
-import { ParticipantService } from '../../services/ParticipantService';
-import { MediasoupRouter } from '../../mediasoup/router';
 import { logger } from '../../utils/logger';
-import { joinRoomSchema } from '../../utils/validation';
+import { closeRoom, findOrCreateLiveRoom, getLiveRoom, getRoomFromDb } from '../../services/RoomService';
+import { addParticipantToRoom, canJoinRoom, getLiveParticipant, removeParticipant } from '../../services/ParticipantService';
+// Assuming validation schemas and shared types are available
+// import { joinRoomSchema, JoinRoomPayload } from '@relay-app/shared';
 
-const roomService = RoomService.getInstance();
-const participantService = ParticipantService.getInstance();
-const mediasoupRouter = MediasoupRouter.getInstance();
+/**
+ * Registers all room-related handlers for a new socket connection.
+ * @param io The Socket.IO server instance.
+ * @param socket The newly connected socket.
+ */
+export function registerRoomHandlers(io: Server, socket: Socket): void {
 
-export function roomHandler(socket: Socket, io: Server): void {
-  socket.on('join-room', async (data: { roomId: string; role?: 'host' | 'guest' | 'viewer' }) => {
+  /**
+   * Handles a user's request to join a room.
+   * This is the main entry point for a user into a session.
+   */
+  socket.on('join-room', async (payload: { roomId: string, name: string, role: 'host' | 'guest' | 'viewer' }) => {
     try {
-      const validationResult = joinRoomSchema.safeParse(data);
-      if (!validationResult.success) {
-        socket.emit('error', {
-          message: 'Invalid room ID',
-          code: 'VALIDATION_ERROR',
-        });
-        return;
-      }
+      // const { roomId, name, role } = joinRoomSchema.parse(payload);
+      const { roomId, name, role } = payload; // Assuming validation for now
 
-      const { roomId, role } = data;
-      
-      // Get or create room with the provided roomId
-      let room = await roomService.getRoomById(roomId);
+      // 1. Find or create the live room instance.
+      const room = await findOrCreateLiveRoom(roomId);
       if (!room) {
-        // Create room with the specific roomId (not auto-generated)
-        room = await roomService.createRoomWithId(roomId, { name: `Podcast Room ${roomId}` });
+        return socket.emit('error', { message: 'Room could not be found or created.' });
       }
 
-      const existingParticipants = await participantService.getParticipantsByRoomId(roomId);
-      const activeStreamers = existingParticipants.filter(p => p.isHost || (!p.isHost && existingParticipants.some(h => h.isHost)));
-      
-      // Determine user role
-      let isHost = false;
-      let isViewer = false;
-      
-      if (role === 'viewer') {
-        isViewer = true;
-      } else if (role === 'host' || existingParticipants.length === 0) {
-        // First person to join becomes host, or explicit host role
-        isHost = true;
-        if (activeStreamers.filter(p => p.isHost).length > 0) {
-          socket.emit('error', {
-            message: 'This room already has a host. Join as guest or viewer.',
-            code: 'HOST_EXISTS',
-          });
-          return;
-        }
-      } else {
-        // Guest role
-        if (activeStreamers.length >= 2) {
-          socket.emit('error', {
-            message: 'Room is full. Only 2 participants allowed (host + guest). You can join as a viewer.',
-            code: 'ROOM_FULL',
-          });
-          return;
-        }
+      // 2. Authorize the join request.
+      const authError = canJoinRoom(room, role);
+      if (authError) {
+        return socket.emit('error', { message: authError });
       }
 
-      // Create router for room if not exists (only needed for WebRTC participants)
-      if (!isViewer && !room.router) {
-        room.router = await mediasoupRouter.createRouter(roomId);
-        roomService.setMemoryRoom(room);
-      }
+      // 3. Add the participant to the room.
+      const isHost = role === 'host' || room.participants.size === 0;
+      const isViewer = role === 'viewer';
+      const participant = await addParticipantToRoom(room, socket.id, name, isHost, isViewer);
 
-      // Create participant
-      const participant = await participantService.createParticipant({
-        roomId,
-        socketId: socket.id,
-        isHost,
-        isViewer,
-      });
-
-      // Join socket room
+      // 4. Join the socket to the room's broadcast channel.
       socket.join(roomId);
 
-      // Update room participant count
-      await participantService.updateRoomParticipantCount(roomId);
-
-      // Add participant to memory room (only if not viewer)
-      if (!isViewer && room.participants) {
-        room.participants.set(participant.id, {
-          ...participant,
-          transports: new Map(),
-          producers: new Map(),
-          consumers: new Map(),
-        });
+      // 5. Send confirmation and initial state to the joining user.
+      const dbRoomData = await getRoomFromDb(roomId);
+      if (!dbRoomData) {
+        return socket.emit('error', { message: 'Room data could not be loaded from database.' });
       }
-
-      // Get all participants for response
-      const allParticipants = await participantService.getParticipantsByRoomId(roomId);
-      
-      // Format participants for client
-      const formattedParticipants = allParticipants.map(p => ({
-        id: p.id,
-        isHost: p.isHost,
-        isViewer: p.isViewer || false,
-        hasVideo: p.hasVideo,
-        hasAudio: p.hasAudio,
-        isStreaming: p.isStreaming,
-      }));
-
-      // Send room-joined event to the joining participant
       socket.emit('room-joined', {
-        roomId,
-        participants: formattedParticipants,
-        routerRtpCapabilities: room.router?.rtpCapabilities || null,
-        isHost,
-        isViewer,
-        userRole: isHost ? 'host' : isViewer ? 'viewer' : 'guest',
-      });
-
-      // Notify existing participants about the new participant
-      socket.to(roomId).emit('participant-joined', {
-        participant: {
-          id: participant.id,
-          isHost: participant.isHost,
-          hasVideo: participant.hasVideo,
-          hasAudio: participant.hasAudio,
-          isStreaming: participant.isStreaming,
-        },
-      });
-
-      logger.info(`Participant ${participant.id} joined room ${roomId} as ${isHost ? 'host' : 'guest'}`);
-      
-      // If this is the second participant (guest), notify about existing producers
-      if (!isHost && room.participants.size > 1) {
-        // Find existing participants and their producers
-        for (const [participantId, memoryParticipant] of room.participants) {
-          if (participantId !== participant.id && memoryParticipant.producers.size > 0) {
-            // Notify about existing producers
-            memoryParticipant.producers.forEach((producer) => {
-              socket.emit('new-producer', {
-                producerId: producer.id,
-                participantId,
-                kind: producer.kind,
-              });
-            });
-          }
-        }
-      }
-    } catch (error) {
-      logger.error('Error in join-room handler:', error);
-      socket.emit('error', {
-        message: 'Failed to join room',
-        code: 'JOIN_ROOM_ERROR',
-      });
-    }
-  });
-
-  socket.on('start-streaming', async (data: { roomId: string }) => {
-    try {
-      const participant = await participantService.getParticipantBySocketId(socket.id);
-      if (!participant) {
-        socket.emit('error', {
-          message: 'Participant not found',
-          code: 'PARTICIPANT_NOT_FOUND',
-        });
-        return;
-      }
-
-      // Update participant streaming status
-      await participantService.updateParticipant(participant.id, {
-        isStreaming: true,
-      });
-
-      // Notify others in the room
-      socket.to(participant.roomId).emit('participant-started-streaming', {
+        room: room.toPlainObject(dbRoomData), // Send full room state
         participantId: participant.id,
+        routerRtpCapabilities: isViewer ? null : room.router.rtpCapabilities,
       });
 
-      logger.info(`Participant ${participant.id} started streaming in room ${participant.roomId}`);
+      // 6. Notify everyone else in the room about the new participant.
+      socket.to(roomId).emit('new-participant', { participant: participant.toPlainObject() });
+
+      logger.info(`Participant joined | name: ${name}, socket: ${socket.id}, room: ${roomId}, role: ${role}`);
+
     } catch (error) {
-      logger.error('Error in start-streaming handler:', error);
+      logger.error(`Error in 'join-room' handler for socket ${socket.id}:`, error);
+      socket.emit('error', { message: 'An internal error occurred while joining the room.' });
     }
   });
 
-  socket.on('stop-streaming', async (data: { roomId: string }) => {
-    try {
-      const participant = await participantService.getParticipantBySocketId(socket.id);
-      if (!participant) return;
-
-      // Update participant streaming status
-      await participantService.updateParticipant(participant.id, {
-        isStreaming: false,
-        hasVideo: false,
-        hasAudio: false,
-      });
-
-      // Close all producers for this participant
-      const room = roomService.getMemoryRoom(participant.roomId);
-      const memoryParticipant = room?.participants.get(participant.id);
-      if (memoryParticipant) {
-        memoryParticipant.producers.forEach((producer) => {
-          producer.close();
-          // Notify others about closed producer
-          socket.to(participant.roomId).emit('producer-closed', {
-            producerId: producer.id,
-            participantId: participant.id,
-          });
-        });
-        memoryParticipant.producers.clear();
-      }
-
-      // Notify others in the room
-      socket.to(participant.roomId).emit('participant-stopped-streaming', {
-        participantId: participant.id,
-      });
-
-      logger.info(`Participant ${participant.id} stopped streaming in room ${participant.roomId}`);
-    } catch (error) {
-      logger.error('Error in stop-streaming handler:', error);
-    }
+  /**
+   * Handles a user explicitly leaving a room.
+   */
+  socket.on('leave-room', () => {
+    // The disconnect handler will take care of all cleanup.
+    socket.disconnect();
   });
 
-  socket.on('leave-room', async () => {
-    try {
-      const participant = await participantService.getParticipantBySocketId(socket.id);
-      if (!participant) return;
-
-      const { roomId } = participant;
-
-      // Close all transports, producers, and consumers
-      const room = roomService.getMemoryRoom(roomId);
-      const memoryParticipant = room?.participants.get(participant.id);
-      if (memoryParticipant) {
-        // Close producers
-        memoryParticipant.producers.forEach((producer) => {
-          producer.close();
-          socket.to(roomId).emit('producer-closed', {
-            producerId: producer.id,
-            participantId: participant.id,
-          });
-        });
-
-        // Close consumers
-        memoryParticipant.consumers.forEach((consumer) => {
-          consumer.close();
-        });
-
-        // Close transports
-        memoryParticipant.transports.forEach((transport) => {
-          transport.close();
-        });
-      }
-
-      // Remove participant
-      await participantService.removeParticipant(participant.id);
-
-      // Update room participant count
-      await participantService.updateRoomParticipantCount(roomId);
-
-      // Leave socket room
-      socket.leave(roomId);
-
-      // Remove from memory room
-      if (room) {
-        room.participants.delete(participant.id);
-      }
-
-      // Notify other participants
-      socket.to(roomId).emit('participant-left', {
-        participantId: participant.id,
-      });
-
-      logger.info(`Participant ${participant.id} left room ${roomId}`);
-    } catch (error) {
-      logger.error('Error in leave-room handler:', error);
-    }
-  });
-
+  /**
+   * Handles the socket 'disconnect' event, which is the single source of truth for cleanup.
+   * This is called automatically when a user closes their browser or loses connection.
+   */
   socket.on('disconnect', async () => {
     try {
-      const participant = await participantService.getParticipantBySocketId(socket.id);
-      if (!participant) return;
+      const participant = getLiveParticipant(socket.id);
+      if (!participant) return; // User was not in a room
 
-      const { roomId } = participant;
+      logger.info(`Participant disconnecting | name: ${participant.name}, socket: ${socket.id}`);
+      
+      // The service handles all cleanup: closing transports, removing from DB, etc.
+      await removeParticipant(socket.id);
 
-      // Close all transports, producers, and consumers
-      const room = roomService.getMemoryRoom(roomId);
-      const memoryParticipant = room?.participants.get(participant.id);
-      if (memoryParticipant) {
-        // Close producers
-        memoryParticipant.producers.forEach((producer) => {
-          producer.close();
-          socket.to(roomId).emit('producer-closed', {
-            producerId: producer.id,
-            participantId: participant.id,
-          });
-        });
+      // Notify the remaining participants that this user has left.
+      io.to(participant.roomId).emit('participant-left', { participantId: participant.id });
 
-        // Close consumers
-        memoryParticipant.consumers.forEach((consumer) => {
-          consumer.close();
-        });
-
-        // Close transports
-        memoryParticipant.transports.forEach((transport) => {
-          transport.close();
-        });
+      // If the room is now empty, we can close the live room to conserve resources.
+      const room = getLiveRoom(participant.roomId);
+      if (room && room.participants.size === 0) {
+        logger.info(`Room is now empty, closing live room | roomId: ${participant.roomId}`);
+        closeRoom(participant.roomId);
       }
-
-      // Remove participant
-      await participantService.removeParticipant(participant.id);
-
-      // Update room participant count
-      await participantService.updateRoomParticipantCount(roomId);
-
-      // Remove from memory room
-      if (room) {
-        room.participants.delete(participant.id);
-      }
-
-      // Notify other participants
-      socket.to(roomId).emit('participant-left', {
-        participantId: participant.id,
-      });
-
-      logger.info(`Participant ${participant.id} disconnected from room ${roomId}`);
     } catch (error) {
-      logger.error('Error in disconnect handler:', error);
+      logger.error(`Error in 'disconnect' handler for socket ${socket.id}:`, error);
     }
   });
 }

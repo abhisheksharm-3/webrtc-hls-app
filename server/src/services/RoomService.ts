@@ -1,192 +1,110 @@
+/**
+ * @file Manages the lifecycle of rooms, coordinating between the database and live media state.
+ */
 import prisma from '../config/database';
+import { LiveRoom } from '../models/Room';
+import { Room as PlainRoom, Room, RoomUpdateInput } from '@relay-app/shared';
+import * as workerManager from '../mediasoup/worker';
+import * as routerManager from '../mediasoup/router';
 import { logger } from '../utils/logger';
-import { generateId } from '../utils/helpers';
-import type { Room, CreateRoomRequest } from '../models/Room';
 
-export class RoomService {
-  private static instance: RoomService;
-  private rooms: Map<string, Room> = new Map();
+const liveRooms = new Map<string, LiveRoom>();
 
-  public static getInstance(): RoomService {
-    if (!RoomService.instance) {
-      RoomService.instance = new RoomService();
-    }
-    return RoomService.instance;
+export function getLiveRoom(roomId: string): LiveRoom | undefined {
+  return liveRooms.get(roomId);
+}
+
+export function getAllLiveRooms(): LiveRoom[] {
+  return Array.from(liveRooms.values());
+}
+
+/**
+ * Retrieves a room's data directly from the database.
+ * @param roomId - The ID of the room to find.
+ * @returns The database room object, or null if not found.
+ */
+export async function getRoomFromDb(roomId: string): Promise<Room | null> {
+  return prisma.room.findUnique({ where: { id: roomId } });
+}
+
+export async function createRoom(name: string): Promise<PlainRoom> {
+  const roomRecord = await prisma.room.create({ data: { name, isActive: true } });
+  const worker = workerManager.getNextWorker();
+  const router = await routerManager.createRouter(worker);
+  const liveRoom = new LiveRoom(roomRecord.id, router);
+  liveRooms.set(roomRecord.id, liveRoom);
+  logger.info(`🚀 Room is now live | roomId: ${roomRecord.id}`);
+  return liveRoom.toPlainObject(roomRecord);
+}
+
+export async function findOrCreateLiveRoom(roomId: string): Promise<LiveRoom | null> {
+  const existingLiveRoom = getLiveRoom(roomId);
+  if (existingLiveRoom) {
+    return existingLiveRoom;
   }
 
-  async createRoom(data: CreateRoomRequest): Promise<Room> {
-    try {
-      const roomData = await prisma.room.create({
-        data: {
-          name: data.name,
-          isActive: true,
-          participantCount: 0,
-        },
-      });
-
-      const room: Room = {
-        id: roomData.id,
-        name: roomData.name,
-        isActive: roomData.isActive,
-        participantCount: roomData.participantCount,
-        createdAt: roomData.createdAt,
-        updatedAt: roomData.updatedAt,
-        participants: new Map(),
-        producers: new Map(),
-      };
-
-      this.rooms.set(room.id, room);
-      logger.info(`Room created: ${room.id}`);
-      
-      return room;
-    } catch (error) {
-      logger.error('Error creating room:', error);
-      throw new Error('Failed to create room');
-    }
+  const roomRecord = await getRoomFromDb(roomId);
+  if (!roomRecord) {
+    logger.warn(`Attempted to join non-existent room | roomId: ${roomId}`);
+    return null;
   }
 
-  async createRoomWithId(roomId: string, data: CreateRoomRequest): Promise<Room> {
-    try {
-      const roomData = await prisma.room.create({
-        data: {
-          id: roomId,
-          name: data.name,
-          isActive: true,
-          participantCount: 0,
-        },
-      });
+  logger.info(`Activating room from DB | roomId: ${roomId}`);
+  const worker = workerManager.getNextWorker();
+  const router = await routerManager.createRouter(worker);
+  const newLiveRoom = new LiveRoom(roomRecord.id, router);
+  liveRooms.set(roomRecord.id, newLiveRoom);
+  return newLiveRoom;
+}
 
-      const room: Room = {
-        id: roomData.id,
-        name: roomData.name,
-        isActive: roomData.isActive,
-        participantCount: roomData.participantCount,
-        createdAt: roomData.createdAt,
-        updatedAt: roomData.updatedAt,
-        participants: new Map(),
-        producers: new Map(),
-      };
-
-      this.rooms.set(room.id, room);
-      logger.info(`Room created with custom ID: ${room.id}`);
-      
-      return room;
-    } catch (error) {
-      logger.error('Error creating room with custom ID:', error);
-      throw new Error('Failed to create room');
+export async function updateRoom(
+  roomId: string,
+  data: RoomUpdateInput
+): Promise<Room | null> {
+  try {
+    const updatedRoomRecord = await prisma.room.update({
+      where: { id: roomId },
+      data,
+    });
+    const liveRoom = getLiveRoom(roomId);
+    if (liveRoom && data.hlsUrl !== undefined) {
+      liveRoom.router.appData.hlsUrl = data.hlsUrl;
     }
+    logger.info(`Room updated in DB | roomId: ${roomId}`);
+    return updatedRoomRecord;
+  } catch (error) {
+    logger.error(`Error updating room in DB | roomId: ${roomId}`, error);
+    return null;
   }
+}
 
-  async getRoomById(roomId: string): Promise<Room | null> {
-    try {
-      let room = this.rooms.get(roomId);
-      
-      if (!room) {
-        const roomData = await prisma.room.findUnique({
-          where: { id: roomId },
-        });
+/**
+ * Closes a live room, shuts down its Mediasoup router, and updates its DB status.
+ * @param roomId The ID of the room to close.
+ */
+export async function closeRoom(roomId: string): Promise<void> {
+    const room = liveRooms.get(roomId);
+    if (!room) return;
 
-        if (roomData) {
-          room = {
-            id: roomData.id,
-            name: roomData.name,
-            isActive: roomData.isActive,
-            participantCount: roomData.participantCount,
-            hlsUrl: roomData.hlsUrl || undefined,
-            createdAt: roomData.createdAt,
-            updatedAt: roomData.updatedAt,
-            participants: new Map(),
-            producers: new Map(),
-          };
-          this.rooms.set(room.id, room);
-        }
-      }
-
-      return room || null;
-    } catch (error) {
-      logger.error('Error getting room:', error);
-      return null;
-    }
-  }
-
-  async getAllRooms(): Promise<Room[]> {
-    try {
-      const roomsData = await prisma.room.findMany({
-        orderBy: { createdAt: 'desc' },
-      });
-
-      return roomsData.map(roomData => ({
-        id: roomData.id,
-        name: roomData.name,
-        isActive: roomData.isActive,
-        participantCount: roomData.participantCount,
-        hlsUrl: roomData.hlsUrl || undefined,
-        createdAt: roomData.createdAt,
-        updatedAt: roomData.updatedAt,
-        participants: this.rooms.get(roomData.id)?.participants || new Map(),
-        producers: this.rooms.get(roomData.id)?.producers || new Map(),
-      }));
-    } catch (error) {
-      logger.error('Error getting rooms:', error);
-      return [];
-    }
-  }
-
-  async updateRoom(roomId: string, updates: Partial<Room>): Promise<Room | null> {
-    try {
-      const roomData = await prisma.room.update({
+    logger.info(`Shutting down live room | roomId: ${roomId}`);
+    
+    // This closes the router and all associated producers, consumers, etc.
+    routerManager.closeRouter(room.router.id);
+    
+    // Remove from the active list.
+    liveRooms.delete(roomId);
+    
+    // Mark as inactive in the database.
+    await prisma.room.update({
         where: { id: roomId },
-        data: {
-          name: updates.name,
-          isActive: updates.isActive,
-          participantCount: updates.participantCount,
-          hlsUrl: updates.hlsUrl,
-        },
-      });
+        data: { isActive: false },
+    }).catch((err: Error) => logger.error(`Failed to mark room as inactive in DB | roomId: ${roomId}`, err));
+}
 
-      const room = this.rooms.get(roomId);
-      if (room) {
-        Object.assign(room, {
-          name: roomData.name,
-          isActive: roomData.isActive,
-          participantCount: roomData.participantCount,
-          hlsUrl: roomData.hlsUrl || undefined,
-          updatedAt: roomData.updatedAt,
-        });
-      }
-
-      return room || null;
-    } catch (error) {
-      logger.error('Error updating room:', error);
-      return null;
-    }
-  }
-
-  async deleteRoom(roomId: string): Promise<boolean> {
-    try {
-      await prisma.room.delete({
-        where: { id: roomId },
-      });
-
-      this.rooms.delete(roomId);
-      logger.info(`Room deleted: ${roomId}`);
-      
-      return true;
-    } catch (error) {
-      logger.error('Error deleting room:', error);
-      return false;
-    }
-  }
-
-  getMemoryRoom(roomId: string): Room | undefined {
-    return this.rooms.get(roomId);
-  }
-
-  setMemoryRoom(room: Room): void {
-    this.rooms.set(room.id, room);
-  }
-
-  getAllMemoryRooms(): Map<string, Room> {
-    return this.rooms;
-  }
+/**
+ * Retrieves all rooms from the database.
+ * @returns An array of all room objects.
+ */
+export async function getAllRoomsFromDb(): Promise<Room[]> {
+  return prisma.room.findMany();
 }

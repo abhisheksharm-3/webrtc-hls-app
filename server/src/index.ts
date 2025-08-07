@@ -6,103 +6,85 @@ import path from 'path';
 
 import env from './config/environment';
 import { logger } from './utils/logger';
-import { MediasoupWorker } from './mediasoup/worker';
 import { setupSocket } from './socket';
 
-// Import routes
+// Import API route handlers
 import healthRoutes from './routes/health';
 import roomRoutes from './routes/rooms';
 import hlsRoutes from './routes/hls';
+import { closeAllWorkers, initializeWorkers } from './mediasoup/worker';
 
+/**
+ * The main bootstrap function for the application.
+ */
 async function startServer() {
   try {
-    // Initialize Express app
-    const app = express();
-    const server = createServer(app);
+    // --- 1. Initialize Mediasoup Workers ---
+    // This must be done first, as everything else depends on the workers.
+    logger.info('Initializing Mediasoup workers...');
+    await initializeWorkers();
 
-    // Middleware
+    // --- 2. Setup Express Server and Middleware ---
+    const app = express();
+    const httpServer = createServer(app);
+
+    // Standard security and CORS middleware
     app.use(helmet({
       crossOriginEmbedderPolicy: false,
       contentSecurityPolicy: false,
     }));
-    
     app.use(cors({
       origin: env.ALLOWED_ORIGINS.split(','),
       credentials: true,
     }));
-
     app.use(express.json({ limit: '10mb' }));
     app.use(express.urlencoded({ extended: true }));
 
-    // Static files for HLS
-    app.use('/hls', express.static(path.join(process.cwd(), env.HLS_STORAGE_PATH)));
+    // --- 3. Define Routes and Static File Serving ---
+    // Serve the HLS (.m3u8, .ts) files statically
+    app.use('/hls', express.static(path.resolve(process.cwd(), env.HLS_STORAGE_PATH)));
 
-    // Routes
+    // Register API routes
     app.use('/api/health', healthRoutes);
-    app.use('/health', healthRoutes); // Direct health endpoint for Docker
+    app.use('/health', healthRoutes);
     app.use('/api/rooms', roomRoutes);
-    app.use('/hls', hlsRoutes);
+    // Note: The '/hls' route is used for both static files and potential API calls (like getting a playlist)
 
-    // Initialize Mediasoup workers
-    logger.info('Initializing Mediasoup workers...');
-    await MediasoupWorker.getInstance().initialize();
+    // --- 4. Setup Socket.IO Server ---
+    logger.info('Setting up Socket.IO...');
+    const io = setupSocket(httpServer);
 
-    // Setup Socket.io
-    logger.info('Setting up Socket.io...');
-    const io = setupSocket(server);
-
-    // Error handling middleware
-    app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    // --- 5. Setup Error Handling ---
+    // Generic error handler for express routes
+    app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
       logger.error('Express error:', err);
       res.status(500).json({
         error: 'Internal Server Error',
-        message: env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
+        message: env.NODE_ENV === 'development' ? err.message : 'An unexpected error occurred.',
       });
     });
 
-    // 404 handler
-    app.use('*', (req: express.Request, res: express.Response) => {
-      res.status(404).json({
-        error: 'Not Found',
-        message: 'The requested resource was not found',
-      });
+    // --- 6. Start the Server ---
+    httpServer.listen(env.PORT, () => {
+      logger.info(`🚀 Server is live and listening on port ${env.PORT}`);
     });
 
-    // Start server
-    server.listen(env.PORT, () => {
-      logger.info(`🚀 WebRTC-HLS Server running on port ${env.PORT}`);
-      logger.info(`📡 Socket.io ready for connections`);
-      logger.info(`🎥 HLS storage path: ${env.HLS_STORAGE_PATH}`);
-      logger.info(`🌐 CORS origins: ${env.ALLOWED_ORIGINS}`);
-    });
-
-    // Graceful shutdown
-    process.on('SIGTERM', async () => {
-      logger.info('SIGTERM received, shutting down gracefully...');
-      
+    // --- 7. Configure Graceful Shutdown ---
+    const shutdown = () => {
+      logger.info('SIGTERM/SIGINT received, shutting down gracefully...');
       io.close();
-      await MediasoupWorker.getInstance().close();
-      
-      server.close(() => {
-        logger.info('Server closed');
+      closeAllWorkers();
+      httpServer.close(() => {
+        logger.info('Server closed.');
         process.exit(0);
       });
-    });
+    };
 
-    process.on('SIGINT', async () => {
-      logger.info('SIGINT received, shutting down gracefully...');
-      
-      io.close();
-      await MediasoupWorker.getInstance().close();
-      
-      server.close(() => {
-        logger.info('Server closed');
-        process.exit(0);
-      });
-    });
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
 
   } catch (error) {
-    logger.error('Failed to start server:', error);
+    logger.error('❌ Failed to start server:', error);
     process.exit(1);
   }
 }

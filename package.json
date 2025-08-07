@@ -1,6 +1,11 @@
 {
-  "name": "webrtc-hls",
+  "name": "relay-app",
   "private": true,
+  "workspaces": [
+    "server",
+    "client", 
+    "shared"
+  ],
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:client": "cd client && npm run dev",
