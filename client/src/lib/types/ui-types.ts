@@ -1,46 +1,50 @@
 import { MediaDeviceStatus, Participant } from "./stream-types";
+import { UserRole } from "@/store/app-store";
 
 export interface StreamHeaderProps {
-  isConnected: boolean;
-  sidebarOpen: boolean;
-  onLeave: () => void;
-  onToggleSidebar: () => void;
+  roomCode: string;
+  userRole: UserRole;
+  participantCount: number;
+  isStreaming: boolean;
+  onLeaveRoom: () => void;
+  onToggleHLS: () => void;
+  isHlsEnabled: boolean;
 }
 
 export interface VideoStageProps {
-  isStreaming: boolean;
   localVideoRef: React.RefObject<HTMLVideoElement>;
-  remoteParticipants: Participant[];
-  getRemoteVideoRef: (
-    participantId: string
-  ) => (el: HTMLVideoElement | null) => void;
-  onStartStreaming: () => void;
-  isReady: boolean;
+  participants: Participant[];
+  selfId: string | undefined;
+  getRemoteVideoRef: (participantId: string) => (el: HTMLVideoElement | null) => void;
+  userRole: UserRole;
+  isStreaming: boolean;
 }
 
 export interface PreStreamOverlayProps {
-  onStartStreaming: () => void;
-  isReady: boolean;
-  hasGuest: boolean;
+  roomCode: string;
+  userRole: UserRole;
+  isConnected: boolean;
+  onStartStream: () => Promise<void>;
+  onLeaveRoom: () => void;
+  participants: Participant[];
+  error: string | null;
 }
 
 export interface StreamControlProps {
-  mediaStatus: MediaDeviceStatus;
+  mediaDeviceStatus: MediaDeviceStatus;
   onToggleMedia: (type: "video" | "audio") => void;
-  onStopStreaming: () => void;
+  onLeaveRoom: () => void;
+  userRole: UserRole;
+  isStreaming: boolean;
 }
 
 export interface StreamSidebarProps {
-  isOpen: boolean;
-  onClose: () => void;
+  roomCode: string;
   participants: Participant[];
-  selfId?: string;
-  roomId: string;
-  isStreaming: boolean;
-  isHlsEnabled: boolean;
+  selfId: string | undefined;
+  userRole: UserRole;
   hlsUrl: string | null;
-  onToggleHLS: () => void;
-  onCopy: (text: string) => void;
+  onCopyToClipboard: (text: string) => Promise<void>;
 }
 
 export interface PlayerControlProps {

@@ -1,70 +1,76 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { Header } from '@/components/layout/Header';
-import { HeroSection } from '@/components/landing/HeroSection';
-import { QuickJoinSection } from '@/components/landing/QuickJoinSection';
-import { FeaturesSection } from '@/components/landing/FeaturesSection';
-import { HowItWorksSection } from '@/components/landing/HowItWorks';
-import { CTASection } from '@/components/landing/CTASection';
-import { Footer } from '@/components/layout/Footer';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
+import { Header } from "@/components/layout/Header";
+import { HeroSection } from "@/components/landing/HeroSection";
+import { QuickJoinSection } from "@/components/landing/QuickJoinSection";
+import { FeaturesSection } from "@/components/landing/FeaturesSection";
+import { HowItWorksSection } from "@/components/landing/HowItWorks";
+import { CTASection } from "@/components/landing/CTASection";
+import { Footer } from "@/components/layout/Footer";
+import { generateRoomId } from "@/lib/room-utils";
+
+/**
+ * The main landing page of the application.
+ * It handles the primary user actions like creating, joining, or watching a room.
+ */
 export default function HomePage() {
-  const [roomId, setRoomId] = useState('');
+  const [roomId, setRoomId] = useState("");
+  const router = useRouter();
 
-  const generateRoomId = () => {
-    // Generate a more user-friendly room ID
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    const segments = [];
-    for (let i = 0; i < 3; i++) {
-      let segment = '';
-      for (let j = 0; j < 3; j++) {
-        segment += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-      segments.push(segment);
-    }
-    return segments.join('-');
-  };
-
+  /**
+   * Creates a new room and navigates to the stream page as a host.
+   */
   const handleCreateRoom = () => {
     const newRoomId = generateRoomId();
-    // Redirect to stream page as host
-    window.location.href = `/stream?room=${newRoomId}&role=host`;
+    router.push(`/stream/${newRoomId}`);
   };
 
+  /**
+   * Navigates to an existing room as a guest participant.
+   * Validates that the roomId is not empty before navigating.
+   */
   const handleJoinRoom = () => {
-    if (roomId.trim()) {
-      // Redirect to stream page as guest
-      window.location.href = `/stream?room=${roomId.trim()}&role=guest`;
+    const trimmedRoomId = roomId.trim();
+    if (trimmedRoomId) {
+      router.push(`/stream/${trimmedRoomId}`);
     }
   };
 
+  /**
+   * Navigates to an existing room as a viewer.
+   * Validates that the roomId is not empty before navigating.
+   */
   const handleWatchRoom = () => {
-    if (roomId.trim()) {
-      // Redirect to watch page as viewer
-      window.location.href = `/watch?room=${roomId.trim()}`;
+    const trimmedRoomId = roomId.trim();
+    if (trimmedRoomId) {
+      router.push(`/watch/${trimmedRoomId}`);
     }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/5">
       <Header />
-      <HeroSection 
-        onCreateRoom={handleCreateRoom}
-        onJoinRoom={handleJoinRoom}
-        onWatchRoom={handleWatchRoom}
-        roomId={roomId}
-        setRoomId={setRoomId}
-      />
-      <QuickJoinSection 
-        roomId={roomId}
-        setRoomId={setRoomId}
-        onJoinRoom={handleJoinRoom}
-        onWatchRoom={handleWatchRoom}
-      />
-      <FeaturesSection />
-      <HowItWorksSection />
-      <CTASection onCreateRoom={handleCreateRoom} />
+      <main>
+        <HeroSection
+          onCreateRoom={handleCreateRoom}
+          onJoinRoom={handleJoinRoom}
+          onWatchRoom={handleWatchRoom}
+          roomId={roomId}
+          setRoomId={setRoomId}
+        />
+        <QuickJoinSection
+          roomId={roomId}
+          setRoomId={setRoomId}
+          onJoinRoom={handleJoinRoom}
+          onWatchRoom={handleWatchRoom}
+        />
+        <FeaturesSection />
+        <HowItWorksSection />
+        <CTASection onCreateRoom={handleCreateRoom} />
+      </main>
       <Footer />
     </div>
   );

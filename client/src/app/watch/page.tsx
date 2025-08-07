@@ -1,135 +1,217 @@
-'use client';
+"use client";
 
-import { useEffect, useState, useCallback, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { TooltipProvider } from '@/components/ui/tooltip';
-import { Card, CardContent } from '@/components/ui/card';
-import { AlertCircle, Video } from 'lucide-react';
-import Link from 'next/link';
-import { StreamMetadata } from '@/lib/types/stream-types';
-import { WatchHeader } from '@/components/watch/WatchHeader';
-import { StreamBrowser } from '@/components/watch/StreamBrowser';
-import { StreamPlayer } from '@/components/watch/StreamPlayer';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAppStore } from '@/store/app-store';
+import { AppLayout } from '@/components/layout/AppLayout';
+import { useHlsPlayer } from '@/hooks/useHlsPlayer';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { AlertCircle, ArrowLeft, Users, Wifi } from 'lucide-react';
 
-const LoadingSkeleton = () => (
-    <div className="min-h-screen bg-background text-foreground p-8">
-        <header className="flex items-center justify-between mb-8">
-            <Link href="/" className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary"><Video className="h-6 w-6 text-primary-foreground" /></div><div><div className="font-serif text-2xl font-bold">Streamify</div><p className="text-xs text-muted-foreground">Watch Live</p></div></Link>
-        </header>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {Array.from({ length: 8 }).map((_, i) => (<div key={i} className="aspect-video rounded-2xl bg-white/5 animate-pulse"></div>))}
-        </div>
-    </div>
-);
+export default function WatchPage() {
+  const router = useRouter();
+  const { roomCode, userRole, isInRoom, leaveRoom } = useAppStore();
 
-// Separate component that uses useSearchParams
-function WatchContent() {
-  const searchParams = useSearchParams();
-  const directStreamUrl = searchParams.get('stream');
-  const directRoomCode = searchParams.get('room');
-
-  const [streams, setStreams] = useState<StreamMetadata[]>([]);
-  const [currentStream, setCurrentStream] = useState<StreamMetadata | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isDemo, setIsDemo] = useState(false);
-
-  const loadAvailableStreams = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const response = await fetch('/api/streams/live');
-      if (!response.ok) throw new Error('Backend server is not available.');
-      const data = await response.json();
-      setStreams(data.streams || []);
-      setIsDemo(data.isDemo || false);
-      if (data.isDemo && data.streams.length === 0) {
-        setError('⚠️ Backend server unavailable - showing demo data. Start your server to see real streams.');
-      }
-    } catch (err: unknown) {
-      console.error('Error loading streams:', err);
-      if (err instanceof Error) {
-        setError(err.message || 'Failed to load available streams.');
-      } else {
-        setError('Failed to load available streams.');
-      }
-      setStreams([]); // Ensure streams are cleared on error
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const selectStreamByCode = useCallback(async (code: string): Promise<boolean> => {
-    try {
-      const response = await fetch(`/api/streams/by-room/${code}`);
-      if (!response.ok) return false;
-      const stream: StreamMetadata = await response.json();
-      setCurrentStream(stream);
-      // If the found stream isn't in the main list, add it.
-      if (!streams.find(s => s.id === stream.id)) {
-        setStreams(prev => [stream, ...prev]);
-      }
-      return true;
-    } catch (err) {
-      console.error(err);
-      return false;
-    }
-  }, [streams]);
-
+  // Redirect if not properly authenticated as viewer
   useEffect(() => {
-    if (directStreamUrl) {
-      const mockStream: StreamMetadata = { id: 'direct', roomId: 'direct', hlsUrl: directStreamUrl, title: 'Direct HLS Stream', isLive: true, viewers: 1, startedAt: new Date() };
-      setStreams([mockStream]);
-      setCurrentStream(mockStream);
-      setIsLoading(false);
-    } else if (directRoomCode) {
-      selectStreamByCode(directRoomCode).finally(() => setIsLoading(false));
-    } else {
-      loadAvailableStreams();
+    if (!isInRoom || !roomCode || userRole !== 'viewer') {
+      router.push('/');
+      return;
     }
-  }, [directStreamUrl, directRoomCode, loadAvailableStreams, selectStreamByCode]);
+  }, [isInRoom, roomCode, userRole, router]);
 
-  const handleSelectStream = (stream: StreamMetadata) => {
-    setError(null);
-    setCurrentStream(stream);
+  const handleLeaveRoom = () => {
+    leaveRoom();
+    router.push('/');
   };
 
-  if (isLoading) {
-    return <LoadingSkeleton />;
+  // Generate HLS URL (this should come from your server's HLS endpoint)
+  const hlsUrl = roomCode ? `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001'}/hls/${roomCode}/playlist.m3u8` : null;
+  
+  const { 
+    videoRef, 
+    isLoading, 
+    isPlaying, 
+    error, 
+    viewerCount,
+    streamInfo
+  } = useHlsPlayer(hlsUrl);
+
+  // Show loading state if not ready
+  if (!isInRoom || !roomCode || userRole !== 'viewer') {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <div className="text-center">
+            <div className="animate-spin h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Redirecting...</p>
+          </div>
+        </div>
+      </AppLayout>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_center,rgba(var(--primary-rgb),0.03),transparent_80%)]"></div>
-      <WatchHeader onRefresh={loadAvailableStreams} />
+    <AppLayout>
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/5">
+        {/* Header */}
+        <div className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-md">
+          <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-4">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={handleLeaveRoom}
+                className="flex items-center gap-2"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </Button>
+              <div className="flex items-center gap-3">
+                <Badge variant="secondary" className="font-mono">
+                  Room: {roomCode}
+                </Badge>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Wifi className="h-4 w-4" />
+                  <span>Live Stream</span>
+                </div>
+              </div>
+            </div>
+            
+            {viewerCount !== undefined && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Users className="h-4 w-4" />
+                <span>{viewerCount} viewers</span>
+              </div>
+            )}
+          </div>
+        </div>
 
-      <main className="container max-w-screen-2xl px-4 py-6">
-        {error && (
-          <Card className={`mb-6 border-opacity-30 bg-opacity-10 ${isDemo ? 'border-amber-400 bg-amber-400' : 'border-destructive bg-destructive'}`}>
-            <CardContent className="flex items-center gap-3 p-4">
-              <AlertCircle className={`w-5 h-5 flex-shrink-0 ${isDemo ? 'text-amber-300' : 'text-destructive'}`} />
-              <p className={`text-sm font-medium ${isDemo ? 'text-amber-200' : 'text-destructive-foreground'}`}>{error}</p>
-            </CardContent>
-          </Card>
-        )}
+        {/* Main Content */}
+        <div className="container mx-auto px-4 py-6">
+          <div className="max-w-6xl mx-auto">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              {/* Video Player */}
+              <div className="lg:col-span-3">
+                <Card className="overflow-hidden">
+                  <div className="relative aspect-video bg-black">
+                    {error ? (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="text-center text-white">
+                          <AlertCircle className="h-12 w-12 mx-auto mb-4 text-red-500" />
+                          <h3 className="text-lg font-semibold mb-2">Stream Not Available</h3>
+                          <p className="text-sm text-gray-300 mb-4">
+                            {error}
+                          </p>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => window.location.reload()}
+                            className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                          >
+                            Retry
+                          </Button>
+                        </div>
+                      </div>
+                    ) : isLoading ? (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="text-center text-white">
+                          <div className="animate-spin h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                          <p className="text-sm">Loading stream...</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <video
+                        ref={videoRef}
+                        className="w-full h-full object-contain"
+                        controls
+                        autoPlay
+                        muted={false}
+                        playsInline
+                      />
+                    )}
+                  </div>
+                </Card>
 
-        {!currentStream ? (
-          <StreamBrowser streams={streams} isDemo={isDemo} onSelectStream={handleSelectStream} onJoinWithCode={selectStreamByCode} />
-        ) : (
-          <StreamPlayer currentStream={currentStream} allStreams={streams} onSelectStream={handleSelectStream} onPlaybackError={setError} />
-        )}
-      </main>
-    </div>
-  );
-}
+                {/* Stream Info */}
+                {streamInfo && (
+                  <Card className="mt-4 p-4">
+                    <h2 className="text-lg font-semibold mb-2">Live Podcast Stream</h2>
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                        <span>LIVE</span>
+                      </div>
+                      {streamInfo.resolution && (
+                        <span>{streamInfo.resolution.width}x{streamInfo.resolution.height}</span>
+                      )}
+                      {streamInfo.bitrate && (
+                        <span>{Math.round(streamInfo.bitrate / 1000)}kbps</span>
+                      )}
+                    </div>
+                  </Card>
+                )}
+              </div>
 
-// Main component that wraps WatchContent in Suspense
-export default function WatchPage() {
-  return (
-    <TooltipProvider>
-      <Suspense fallback={<LoadingSkeleton />}>
-        <WatchContent />
-      </Suspense>
-    </TooltipProvider>
+              {/* Sidebar */}
+              <div className="lg:col-span-1">
+                <Card className="p-4">
+                  <h3 className="font-semibold mb-3 flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    Stream Info
+                  </h3>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <div className="text-sm font-medium text-muted-foreground mb-1">Room Code</div>
+                      <div className="font-mono text-sm bg-secondary/50 px-2 py-1 rounded">
+                        {roomCode}
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <div className="text-sm font-medium text-muted-foreground mb-1">Status</div>
+                      <Badge variant={isPlaying ? "default" : "secondary"}>
+                        {isPlaying ? "Playing" : "Stopped"}
+                      </Badge>
+                    </div>
+
+                    {viewerCount !== undefined && (
+                      <div>
+                        <div className="text-sm font-medium text-muted-foreground mb-1">Viewers</div>
+                        <div className="text-sm">{viewerCount}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-6 pt-4 border-t">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={handleLeaveRoom}
+                      className="w-full"
+                    >
+                      Leave Stream
+                    </Button>
+                  </div>
+                </Card>
+
+                {/* Viewer Guidelines */}
+                <Card className="p-4 mt-4">
+                  <h3 className="font-semibold mb-2">Viewer Mode</h3>
+                  <div className="text-sm text-muted-foreground space-y-2">
+                    <p>You are watching this stream as a viewer.</p>
+                    <p>Only the host and guest can participate in the conversation.</p>
+                    <p>Enjoy the live podcast!</p>
+                  </div>
+                </Card>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </AppLayout>
   );
 }

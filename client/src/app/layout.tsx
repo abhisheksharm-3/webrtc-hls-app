@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Onest, Newsreader, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 // 1. Define the fonts with their specific weights and CSS variables
 
@@ -57,7 +58,9 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            {children}
+            <TooltipProvider>
+              {children}
+            </TooltipProvider>
           </ThemeProvider>
         </div>
       </body>

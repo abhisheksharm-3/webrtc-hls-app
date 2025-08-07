@@ -152,6 +152,26 @@ export const useWebRTCStream = (roomId: string, role: string | null) => {
     // sendErrorToMonitoring(contextMessage);
   }, []);
 
+  // Initialize local media for preview and streaming
+  const initializeLocalMedia = useCallback(async () => {
+    if (localStreamRef.current) return; // Already initialized
+    
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(MEDIA_CONSTRAINTS);
+      localStreamRef.current = stream;
+      
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+        localVideoRef.current.play().catch(console.warn);
+      }
+      
+      console.log("Local media initialized successfully");
+    } catch (err) {
+      const error = err as Error;
+      handleError(error, "Initialize Local Media");
+    }
+  }, [handleError]);
+
   // Improved socket response handler with proper typing
   const createSocketPromise = useCallback(<T extends object>(
     event: string, 
@@ -440,6 +460,9 @@ export const useWebRTCStream = (roomId: string, role: string | null) => {
               await device.load({ routerRtpCapabilities: data.routerRtpCapabilities });
               deviceRef.current = device;
               console.log("Mediasoup device loaded successfully");
+              
+              // Initialize local media for participants (not viewers)
+              await initializeLocalMedia();
             } catch (err) {
               handleError(err as Error, "Device Initialization");
             }
@@ -549,7 +572,7 @@ export const useWebRTCStream = (roomId: string, role: string | null) => {
       // Clean up WebRTC resources
       cleanupWebRTC();
     };
-  }, [roomId, role, serverUrl, socketConfig, consumeRemoteProducer, handleError, cleanupWebRTC]);
+  }, [roomId, role, serverUrl, socketConfig, consumeRemoteProducer, handleError, cleanupWebRTC, initializeLocalMedia]);
 
   // Effect to manage remote video elements - optimized with dependency array
   useEffect(() => {
@@ -572,7 +595,7 @@ export const useWebRTCStream = (roomId: string, role: string | null) => {
     updateRemoteVideos();
   }, [remoteStreams]);
 
-  // --- Enhanced Action Functions ---
+  // Enhanced Action Functions
 
   const startStreaming = useCallback(async () => {
     if (!deviceRef.current || !socketRef.current) {
@@ -583,13 +606,15 @@ export const useWebRTCStream = (roomId: string, role: string | null) => {
     setError(null);
     
     try {
-      // Get user media with enhanced constraints
-      const stream = await navigator.mediaDevices.getUserMedia(MEDIA_CONSTRAINTS);
-      localStreamRef.current = stream;
+      // Initialize local media if not already done
+      await initializeLocalMedia();
       
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
+      if (!deviceRef.current || !socketRef.current || !localStreamRef.current) {
+        handleError("Cannot start stream: connection or media not ready");
+        return;
       }
+
+      const stream = localStreamRef.current;
 
       // Create transports
       sendTransportRef.current = await createTransport('send');
@@ -620,7 +645,7 @@ export const useWebRTCStream = (roomId: string, role: string | null) => {
       handleError(error, "Start Streaming");
       cleanupWebRTC();
     }
-  }, [roomId, createTransport, handleError, cleanupWebRTC]);
+  }, [roomId, createTransport, handleError, cleanupWebRTC, initializeLocalMedia]);
 
   const stopStreaming = useCallback(() => {
     setError(null);
