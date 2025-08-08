@@ -52,7 +52,7 @@ export async function addParticipantToRoom(
   isViewer: boolean
 ): Promise<LiveParticipant> {
   const dbRecord = await prisma.participant.create({
-    data: { name, socketId, isHost, isViewer, roomId: room.id },
+    data: { name, socketId, isHost, roomId: room.id },
   });
 
   const liveParticipant = new LiveParticipant(dbRecord.id, socketId, room.id, name, isHost, isViewer);

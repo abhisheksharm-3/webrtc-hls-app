@@ -1,120 +1,46 @@
-// /hooks/useHlsPlayer.ts
-
 import { useState, useRef, useEffect, useCallback } from 'react';
-import Hls from 'hls.js';
+import Hls, { Events as HlsEvents, ErrorTypes, ErrorData } from 'hls.js';
 
 interface StreamInfo {
   resolution?: { width: number; height: number };
   bitrate?: number;
-  fps?: number;
 }
 
+/**
+ * A custom React hook to manage an HLS video player.
+ * It handles both Hls.js for standard browsers and native HLS for Safari.
+ *
+ * @param url The HLS playlist URL (.m3u8) to play.
+ * @returns An object containing the video ref, player state, and control actions.
+ */
 export const useHlsPlayer = (url: string | null) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [hlsInstance, setHlsInstance] = useState<Hls | null>(null);
+  // Use useRef for the Hls.js instance to prevent re-renders on change.
+  const hlsInstanceRef = useRef<Hls | null>(null);
 
+  // --- Player State ---
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [viewerCount] = useState<number | undefined>(undefined);
   const [streamInfo, setStreamInfo] = useState<StreamInfo | null>(null);
 
-  const loadSource = useCallback((sourceUrl: string) => {
-    if (!videoRef.current) return;
-
-    setIsLoading(true);
-    setError(null);
-
-    // Clean up previous instance
-    hlsInstance?.destroy();
-
-    if (Hls.isSupported()) {
-      const hls = new Hls({ 
-        lowLatencyMode: true, 
-        enableWorker: true,
-        maxBufferLength: 10,
-        maxMaxBufferLength: 20,
-        liveSyncDurationCount: 2,
-        liveMaxLatencyDurationCount: 5
-      });
-      
-      hls.loadSource(sourceUrl);
-      hls.attachMedia(videoRef.current);
-      
-      hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
-        setIsLoading(false);
-        
-        // Extract stream info
-        if (data.levels && data.levels.length > 0) {
-          const level = data.levels[0];
-          setStreamInfo({
-            resolution: { width: level.width, height: level.height },
-            bitrate: level.bitrate,
-            fps: level.frameRate
-          });
-        }
-        
-        videoRef.current?.play().catch((playError) => {
-          console.warn("Autoplay was prevented by the browser:", playError);
-          setIsPlaying(false);
-        });
-      });
-      
-      hls.on(Hls.Events.ERROR, (_, data) => {
-        setIsLoading(false);
-        if (data.fatal) {
-          console.error('HLS Fatal Error:', data);
-          let errorMessage = 'Stream playback failed.';
-          
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              errorMessage = 'Network error: Unable to load the stream. The stream may not be available yet.';
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              errorMessage = 'Media error: Problem with the stream format or playback.';
-              break;
-            default:
-              errorMessage = 'Stream is not available. Please check if streaming has started.';
-          }
-          
-          setError(errorMessage);
-          hls.destroy();
-        }
-      });
-      
-      setHlsInstance(hls);
-    } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native HLS support (Safari)
-      videoRef.current.src = sourceUrl;
-      videoRef.current.addEventListener('loadedmetadata', () => {
-        setIsLoading(false);
-        videoRef.current?.play().catch(() => setIsPlaying(false));
-      });
-      videoRef.current.addEventListener('error', () => {
-        setIsLoading(false);
-        setError('Stream is not available. Please check if streaming has started.');
-      });
-    } else {
-      setIsLoading(false);
-      setError('HLS is not supported in this browser.');
-    }
-  }, [hlsInstance]);
+  // --- Player Actions ---
 
   const togglePlayPause = useCallback(() => {
-    if (!videoRef.current) return;
-    if (isPlaying) {
-      videoRef.current.pause();
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) {
+      video.play().catch(() => setError("Playback was prevented by the browser."));
     } else {
-      videoRef.current.play();
+      video.pause();
     }
-  }, [isPlaying]);
+  }, []);
 
   const toggleMute = useCallback(() => {
-    if (!videoRef.current) return;
-    const nextMuted = !videoRef.current.muted;
-    videoRef.current.muted = nextMuted;
-    setIsMuted(nextMuted);
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = !video.muted;
   }, []);
 
   const goFullscreen = useCallback(() => {
@@ -123,43 +49,93 @@ export const useHlsPlayer = (url: string | null) => {
     });
   }, []);
 
-  // Effect to sync state with video element events
+  // --- Main Effect for Initializing the Player ---
+
   useEffect(() => {
+    if (!url || !videoRef.current) {
+        setIsLoading(false);
+        if(!url) setError("No stream URL provided.");
+        return;
+    }
+
     const video = videoRef.current;
-    if (!video) return;
-    
+    setIsLoading(true);
+    setError(null);
+
+    // Destroy any previous HLS instance.
+    hlsInstanceRef.current?.destroy();
+
+    const tryPlay = async () => {
+      try {
+        await new Promise(res => setTimeout(res, 300));
+        await video.play();
+        setIsPlaying(true);
+      } catch {
+        setIsPlaying(false);
+      }
+    };
+
+    if (Hls.isSupported()) {
+      const hls = new Hls({ lowLatencyMode: true, enableWorker: true });
+      hlsInstanceRef.current = hls;
+
+      hls.loadSource(url);
+      hls.attachMedia(video);
+
+      hls.on(HlsEvents.MANIFEST_PARSED, async (_, data) => {
+        setIsLoading(false);
+        const level = data.levels?.[0];
+        if (level) {
+          setStreamInfo({
+            resolution: { width: level.width, height: level.height },
+            bitrate: level.bitrate,
+          });
+        }
+        await tryPlay();
+      });
+
+      hls.on(HlsEvents.ERROR, (_, data: ErrorData) => {
+        if (data.fatal) {
+          let errorMessage = 'An unknown error occurred.';
+          switch (data.type) {
+            case ErrorTypes.NETWORK_ERROR:
+              errorMessage = 'Network error: The stream may be offline or starting up.';
+              break;
+            case ErrorTypes.MEDIA_ERROR:
+              errorMessage = 'Media error: There is a problem with the stream\'s format.';
+              break;
+            default:
+              errorMessage = 'Stream is not available.';
+          }
+          setError(errorMessage);
+          setIsLoading(false);
+        }
+      });
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Native HLS support (e.g., Safari)
+      video.src = url;
+      tryPlay();
+    } else {
+        setError('HLS playback is not supported in this browser.');
+    }
+
+    // --- State Sync Event Listeners ---
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
     const handleVolumeChange = () => setIsMuted(video.muted);
-    const handleLoadStart = () => setIsLoading(true);
-    const handleLoadedData = () => setIsLoading(false);
 
     video.addEventListener('play', handlePlay);
     video.addEventListener('pause', handlePause);
     video.addEventListener('volumechange', handleVolumeChange);
-    video.addEventListener('loadstart', handleLoadStart);
-    video.addEventListener('loadeddata', handleLoadedData);
 
+    // Cleanup function
     return () => {
       video.removeEventListener('play', handlePlay);
       video.removeEventListener('pause', handlePause);
       video.removeEventListener('volumechange', handleVolumeChange);
-      video.removeEventListener('loadstart', handleLoadStart);
-      video.removeEventListener('loadeddata', handleLoadedData);
+      hlsInstanceRef.current?.destroy();
     };
-  }, []);
-
-  // Auto-load source when URL changes
-  useEffect(() => {
-    if (url) {
-      loadSource(url);
-    } else {
-      setError('No stream URL provided');
-    }
-  }, [url, loadSource]);
-  
-  // Cleanup on unmount
-  useEffect(() => () => hlsInstance?.destroy(), [hlsInstance]);
+  }, [url]); // This effect runs only when the stream URL changes.
 
   return {
     videoRef,
@@ -167,13 +143,11 @@ export const useHlsPlayer = (url: string | null) => {
     isMuted,
     isLoading,
     error,
-    viewerCount,
     streamInfo,
     actions: {
-      loadSource,
       togglePlayPause,
       toggleMute,
-      goFullscreen
+      goFullscreen,
     },
   };
 };

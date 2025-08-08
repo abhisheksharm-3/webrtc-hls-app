@@ -35,6 +35,9 @@ export class LiveParticipant {
   addProducer(producer: mediasoupTypes.Producer) { this.producers.set(producer.id, producer); }
   addConsumer(consumer: mediasoupTypes.Consumer) { this.consumers.set(consumer.id, consumer); }
 
+  /** Returns current producer ids for this participant */
+  getProducerIds(): string[] { return Array.from(this.producers.keys()); }
+
   close() {
     this.transports.forEach(transport => transport.close());
     this.transports.clear();

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useMemo } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { useAppStore } from '@/store/app-store';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useHlsPlayer } from '@/hooks/useHlsPlayer';
@@ -12,15 +12,18 @@ import { AlertCircle, ArrowLeft, Users, Wifi } from 'lucide-react';
 
 export default function WatchPage() {
   const router = useRouter();
-  const { roomCode, userRole, isInRoom, leaveRoom } = useAppStore();
+  const params = useParams<{ roomId: string }>();
+  const routeRoomId = useMemo(() => (typeof params?.roomId === 'string' ? params.roomId : Array.isArray(params?.roomId) ? params?.roomId?.[0] : ''), [params]);
+  const { roomCode, userRole, isInRoom, leaveRoom, joinRoom } = useAppStore();
 
-  // Redirect if not properly authenticated as viewer
+  // Ensure session for direct visits: default to viewer
   useEffect(() => {
+    if (!routeRoomId) return;
     if (!isInRoom || !roomCode || userRole !== 'viewer') {
-      router.push('/');
-      return;
+      const suffix = Math.random().toString(36).slice(2, 6);
+      joinRoom({ roomCode: routeRoomId, userName: `Viewer-${suffix}`, role: 'viewer' });
     }
-  }, [isInRoom, roomCode, userRole, router]);
+  }, [routeRoomId, isInRoom, roomCode, userRole, joinRoom]);
 
   const handleLeaveRoom = () => {
     leaveRoom();
@@ -28,7 +31,7 @@ export default function WatchPage() {
   };
 
   // Generate HLS URL (this should come from your server's HLS endpoint)
-  const hlsUrl = roomCode ? `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001'}/hls/${roomCode}/playlist.m3u8` : null;
+  const hlsUrl = (roomCode || routeRoomId) ? `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001'}/hls/${roomCode || routeRoomId}/playlist.m3u8` : null;
   
   const { 
     videoRef, 

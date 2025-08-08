@@ -43,10 +43,16 @@ export async function findOrCreateLiveRoom(roomId: string): Promise<LiveRoom | n
     return existingLiveRoom;
   }
 
-  const roomRecord = await getRoomFromDb(roomId);
+  let roomRecord = await getRoomFromDb(roomId);
   if (!roomRecord) {
-    logger.warn(`Attempted to join non-existent room | roomId: ${roomId}`);
-    return null;
+    // If the room doesn't exist in DB, create it on-the-fly to support direct URL joins
+    try {
+      roomRecord = await prisma.room.create({ data: { id: roomId, name: roomId, isActive: true } });
+      logger.info(`Created room record for direct join | roomId: ${roomId}`);
+    } catch (error) {
+      logger.warn(`Attempted to join non-existent room and failed to create | roomId: ${roomId}`);
+      return null;
+    }
   }
 
   logger.info(`Activating room from DB | roomId: ${roomId}`);

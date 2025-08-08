@@ -1,92 +1,74 @@
 import { create } from 'zustand';
-import { devtools } from 'zustand/middleware';
+import { devtools, persist } from 'zustand/middleware';
 
 export type UserRole = 'host' | 'guest' | 'viewer';
 
+/**
+ * Defines the shape of the global application state.
+ */
 export interface AppState {
-  // Room state
+  // Session state
   roomCode: string | null;
+  userName: string | null;
   userRole: UserRole | null;
   isInRoom: boolean;
   
-  // User state
-  isHost: boolean;
-  isGuest: boolean;
-  isViewer: boolean;
-  
-  // Actions
-  setRoomCode: (code: string) => void;
-  setUserRole: (role: UserRole) => void;
-  joinAsHost: (roomCode: string) => void;
-  joinAsGuest: (roomCode: string) => void;
-  joinAsViewer: (roomCode: string) => void;
+  // Actions to modify the state
+  joinRoom: (details: { roomCode: string, userName: string, role: UserRole }) => void;
   leaveRoom: () => void;
-  reset: () => void;
+  setUserName: (name: string) => void;
 }
 
+/**
+ * The initial state when the application loads.
+ */
 const initialState = {
   roomCode: null,
+  userName: null,
   userRole: null,
   isInRoom: false,
-  isHost: false,
-  isGuest: false,
-  isViewer: false,
 };
 
+/**
+ * The main Zustand store for global application state.
+ * It uses `devtools` for Redux DevTools integration and `persist`
+ * to save state to localStorage, allowing it to survive page reloads.
+ */
 export const useAppStore = create<AppState>()(
   devtools(
-    (set) => ({
-      ...initialState,
-      
-      setRoomCode: (code: string) => set({ roomCode: code }),
-      
-      setUserRole: (role: UserRole) => set({ 
-        userRole: role,
-        isHost: role === 'host',
-        isGuest: role === 'guest',
-        isViewer: role === 'viewer'
+    persist(
+      (set) => ({
+        ...initialState,
+        
+        /**
+         * Sets the user's state for joining a room.
+         * This is the primary action for entering a stream or watch page.
+         */
+        joinRoom: (details) => set({
+          roomCode: details.roomCode,
+          userName: details.userName,
+          userRole: details.role,
+          isInRoom: true,
+        }),
+        
+        /**
+         * Resets the session state when a user leaves a room.
+         */
+        leaveRoom: () => set({
+          ...initialState
+        }),
+
+        /**
+         * Updates the user's name.
+         */
+        setUserName: (name: string) => set({
+          userName: name
+        }),
       }),
-      
-      joinAsHost: (roomCode: string) => set({
-        roomCode,
-        userRole: 'host',
-        isInRoom: true,
-        isHost: true,
-        isGuest: false,
-        isViewer: false,
-      }),
-      
-      joinAsGuest: (roomCode: string) => set({
-        roomCode,
-        userRole: 'guest',
-        isInRoom: true,
-        isHost: false,
-        isGuest: true,
-        isViewer: false,
-      }),
-      
-      joinAsViewer: (roomCode: string) => set({
-        roomCode,
-        userRole: 'viewer',
-        isInRoom: true,
-        isHost: false,
-        isGuest: false,
-        isViewer: true,
-      }),
-      
-      leaveRoom: () => set({
-        roomCode: null,
-        userRole: null,
-        isInRoom: false,
-        isHost: false,
-        isGuest: false,
-        isViewer: false,
-      }),
-      
-      reset: () => set(initialState),
-    }),
-    {
-      name: 'app-store',
-    }
+      {
+        // Configuration for the persistence middleware
+        name: 'app-session-storage', // The key to use in localStorage
+      }
+    )
   )
 );

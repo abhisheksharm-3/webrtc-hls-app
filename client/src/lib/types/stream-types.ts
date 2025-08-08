@@ -1,17 +1,4 @@
-/**
- * Represents a participant in the stream room.
- * The server is the source of truth for these properties.
- */
-export interface Participant {
-  id: string;          // Socket ID
-  isHost: boolean;
-  isViewer?: boolean;
-  // These properties should be derived from the presence of producers on the server
-  hasVideo: boolean;
-  hasAudio: boolean;
-  isStreaming: boolean;
-}
-
+import type {Participant} from "@relay-app/shared";
 /**
  * Local media device on/off status.
  */

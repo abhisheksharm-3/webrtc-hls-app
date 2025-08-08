@@ -81,9 +81,9 @@ export const mediasoupConfig = {
    */
   webRtcTransport: {
     listenIps: [listenIpConfig],
-    enableUdp: true,
+    enableUdp: env.MEDIASOUP_FORCE_TCP ? false : true,
     enableTcp: true,
-    preferUdp: true, // UDP is preferred for real-time media due to lower latency.
+    preferUdp: env.MEDIASOUP_FORCE_TCP ? false : true,
   } as mediasoupTypes.WebRtcTransportOptions,
 
   /**

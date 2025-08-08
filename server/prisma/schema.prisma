@@ -28,7 +28,9 @@ model Participant {
   id          String   @id @default(uuid())
   roomId      String
   socketId    String   @unique
+  name        String   @default("")
   isHost      Boolean  @default(false)
+  isViewer    Boolean  @default(false)
   isStreaming Boolean  @default(false)
   hasVideo    Boolean  @default(false)
   hasAudio    Boolean  @default(false)

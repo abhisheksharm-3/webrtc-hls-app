@@ -11,41 +11,54 @@ import { HowItWorksSection } from "@/components/landing/HowItWorks";
 import { CTASection } from "@/components/landing/CTASection";
 import { Footer } from "@/components/layout/Footer";
 import { generateRoomId } from "@/lib/room-utils";
+import { useAppStore } from "@/store/app-store";
 
 /**
- * The main landing page of the application.
- * It handles the primary user actions like creating, joining, or watching a room.
+ * The main landing page component for the application.
+ * It serves as the central hub for users to create a new stream,
+ * join an existing stream as a guest, or watch a stream as a viewer.
  */
 export default function HomePage() {
   const [roomId, setRoomId] = useState("");
   const router = useRouter();
+  const { joinRoom } = useAppStore();
+
+  const generateDisplayName = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 6)}`;
 
   /**
-   * Creates a new room and navigates to the stream page as a host.
+   * Generates a new unique room ID and navigates the user to the
+   * stream page, where they will join as the default host.
    */
   const handleCreateRoom = () => {
     const newRoomId = generateRoomId();
+    // Set session as host before navigating
+    joinRoom({ roomCode: newRoomId, userName: generateDisplayName('Host'), role: 'host' });
+    // Navigates to a dynamic route like /stream/abc-123
     router.push(`/stream/${newRoomId}`);
   };
 
   /**
-   * Navigates to an existing room as a guest participant.
-   * Validates that the roomId is not empty before navigating.
+   * Navigates a user to an existing stream page using the provided room ID.
+   * They will join as a guest participant.
    */
   const handleJoinRoom = () => {
     const trimmedRoomId = roomId.trim();
     if (trimmedRoomId) {
+      // Set session as guest before navigating
+      joinRoom({ roomCode: trimmedRoomId, userName: generateDisplayName('Guest'), role: 'guest' });
       router.push(`/stream/${trimmedRoomId}`);
     }
   };
 
   /**
-   * Navigates to an existing room as a viewer.
-   * Validates that the roomId is not empty before navigating.
+   * Navigates a user to the watch page for an existing stream.
+   * They will join as a view-only participant and watch the HLS broadcast.
    */
   const handleWatchRoom = () => {
     const trimmedRoomId = roomId.trim();
     if (trimmedRoomId) {
+      // Set session as viewer before navigating
+      joinRoom({ roomCode: trimmedRoomId, userName: generateDisplayName('Viewer'), role: 'viewer' });
       router.push(`/watch/${trimmedRoomId}`);
     }
   };
@@ -54,6 +67,7 @@ export default function HomePage() {
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/5">
       <Header />
       <main>
+        {/* The HeroSection contains the primary call-to-action inputs and buttons. */}
         <HeroSection
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
@@ -61,6 +75,7 @@ export default function HomePage() {
           roomId={roomId}
           setRoomId={setRoomId}
         />
+        {/* Other sections that compose the landing page. */}
         <QuickJoinSection
           roomId={roomId}
           setRoomId={setRoomId}

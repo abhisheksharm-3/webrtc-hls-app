@@ -78,6 +78,11 @@ const envSchema = z.object({
    * @default 'http://localhost:3000'
    */
   ALLOWED_ORIGINS: z.string().default('http://localhost:3000'),
+
+  /**
+   * Force Mediasoup WebRTC transports to use TCP only. Helpful on Windows/dev when UDP is blocked.
+   */
+  MEDIASOUP_FORCE_TCP: z.string().optional(),
 });
 
 /**

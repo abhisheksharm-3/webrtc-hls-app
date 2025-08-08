@@ -23,7 +23,8 @@ export async function createWebRtcTransport(
     const transport = await router.createWebRtcTransport(mediasoupConfig.webRtcTransport);
     transports.set(transport.id, transport);
     
-    // Associate the router's ID with this transport for easier lookups later.
+    // Associate the router with this transport for later canConsume checks.
+    transport.appData.router = router;
     transport.appData.routerId = router.id;
 
     // When the transport is closed for any reason, remove it from our map.

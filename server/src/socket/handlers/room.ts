@@ -50,10 +50,19 @@ export function registerRoomHandlers(io: Server, socket: Socket): void {
       if (!dbRoomData) {
         return socket.emit('error', { message: 'Room data could not be loaded from database.' });
       }
+      // Collect existing producers so a late joiner can immediately consume
+      const existingProducerEvents: { producerId: string, participantId: string }[] = [];
+      room.participants.forEach((p) => {
+        p.getProducerIds?.().forEach((producerId) => {
+          existingProducerEvents.push({ producerId, participantId: p.id });
+        });
+      });
+
       socket.emit('room-joined', {
-        room: room.toPlainObject(dbRoomData), // Send full room state
+        room: room.toPlainObject(dbRoomData),
         participantId: participant.id,
         routerRtpCapabilities: isViewer ? null : room.router.rtpCapabilities,
+        existingProducers: existingProducerEvents,
       });
 
       // 6. Notify everyone else in the room about the new participant.
