@@ -23,18 +23,45 @@ export default function HomePage() {
   const router = useRouter();
   const { joinRoom } = useAppStore();
 
-  const generateDisplayName = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 6)}`;
+  const generateDisplayName = (prefix: string) =>
+    `${prefix}-${Math.random().toString(36).slice(2, 6)}`;
 
   /**
    * Generates a new unique room ID and navigates the user to the
    * stream page, where they will join as the default host.
    */
-  const handleCreateRoom = () => {
-    const newRoomId = generateRoomId();
-    // Set session as host before navigating
-    joinRoom({ roomCode: newRoomId, userName: generateDisplayName('Host'), role: 'host' });
-    // Navigates to a dynamic route like /stream/abc-123
-    router.push(`/stream/${newRoomId}`);
+  const handleCreateRoom = async () => {
+    try {
+      // 1. ✅ Generate the clean, user-friendly room ID first.
+      const newRoomId = generateRoomId();
+      const newRoomName = `New Stream by ${generateDisplayName("Host")}`;
+
+      const serverUrl =
+        process.env.NEXT_PUBLIC_SERVER_URL || "http://localhost:3001";
+
+      // 2. ✅ Call the backend with the correct payload.
+      const response = await fetch(`${serverUrl}/api/rooms`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // Send both the generated ID and a descriptive name.
+        body: JSON.stringify({ id: newRoomId, name: newRoomName }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create room on the server.");
+      }
+
+      // 3. ✅ Set the user's session and navigate to the clean URL.
+      joinRoom({
+        roomCode: newRoomId,
+        userName: generateDisplayName("Host"),
+        role: "host",
+      });
+      router.push(`/stream/${newRoomId}`);
+    } catch (error) {
+      console.error("Failed to create room:", error);
+      // Handle the error, maybe show a notification to the user.
+    }
   };
 
   /**
@@ -45,7 +72,11 @@ export default function HomePage() {
     const trimmedRoomId = roomId.trim();
     if (trimmedRoomId) {
       // Set session as guest before navigating
-      joinRoom({ roomCode: trimmedRoomId, userName: generateDisplayName('Guest'), role: 'guest' });
+      joinRoom({
+        roomCode: trimmedRoomId,
+        userName: generateDisplayName("Guest"),
+        role: "guest",
+      });
       router.push(`/stream/${trimmedRoomId}`);
     }
   };
@@ -58,7 +89,11 @@ export default function HomePage() {
     const trimmedRoomId = roomId.trim();
     if (trimmedRoomId) {
       // Set session as viewer before navigating
-      joinRoom({ roomCode: trimmedRoomId, userName: generateDisplayName('Viewer'), role: 'viewer' });
+      joinRoom({
+        roomCode: trimmedRoomId,
+        userName: generateDisplayName("Viewer"),
+        role: "viewer",
+      });
       router.push(`/watch/${trimmedRoomId}`);
     }
   };

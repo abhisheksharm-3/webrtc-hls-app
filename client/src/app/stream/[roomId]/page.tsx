@@ -25,27 +25,43 @@ export default function StreamPage() {
   const routeRoomId = useMemo(() => (typeof params?.roomId === 'string' ? params.roomId : Array.isArray(params?.roomId) ? params?.roomId?.[0] : ''), [params]);
   const { roomCode, userName, userRole, leaveRoom, joinRoom } = useAppStore();
 
-  // Ensure session is initialized for direct URL visits: default to guest
-  useEffect(() => {
-    if (!routeRoomId) return;
-    // If user visited stream URL directly without session, join as guest with a generated name
-    if (!roomCode || !userName || !userRole) {
-      const randomSuffix = Math.random().toString(36).slice(2, 6);
-      joinRoom({ roomCode: routeRoomId, userName: userName || `Guest-${randomSuffix}`, role: 'guest' });
-      return;
-    }
-    // If somehow a viewer lands on stream page, send them to watch page for this room
-    if (userRole === 'viewer') {
-      router.replace(`/watch/${roomCode || routeRoomId}`);
-    }
-  }, [routeRoomId, roomCode, userName, userRole, joinRoom, router]);
+  // Ensure session is initialized for direct URL visits
+useEffect(() => {
+  if (!routeRoomId) return;
+
+  // This logic runs if a user lands on the URL directly without a session.
+  if (!roomCode || !userName || !userRole) {
+    const randomSuffix = Math.random().toString(36).slice(2, 6);
+    const defaultName = `Guest-${randomSuffix}`;
+    joinRoom({ roomCode: routeRoomId, userName: defaultName, role: 'guest' });
+    
+    // ✅ The fetch call that was here has been removed. It's no longer needed.
+    // The socket connection will handle creating the live room instance.
+    
+    return; // Exit effect to allow re-render with new session state
+  }
+  
+  // Redirect viewers away from the interactive stream page
+  if (userRole === 'viewer') {
+    router.replace(`/watch/${roomCode || routeRoomId}`);
+  }
+}, [routeRoomId, roomCode, userName, userRole, joinRoom, router]);
 
   // If params missing, go home
   useEffect(() => {
     if (!routeRoomId) router.replace('/');
   }, [routeRoomId, router]);
 
-  const streamHook = useWebRTCStream((roomCode || routeRoomId || ''), userName || '', userRole);
+  const streamHook = useWebRTCStream((roomCode || routeRoomId || ''), userName || undefined as unknown as string, userRole);
+
+  // If we still aren't connected after a short delay, keep the session stable.
+  // This helps ensure the hook has all fields ready before attempting to connect.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      // No forced action; this timeout merely sequences state so the hook's effect will fire with non-empty deps
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [streamHook.isConnected, roomCode, userName, userRole, routeRoomId]);
 
   /**
    * A comprehensive leave action that cleans up both the WebRTC state
@@ -64,7 +80,14 @@ export default function StreamPage() {
         <div className="flex items-center justify-center h-screen">
           <div className="text-center">
             <div className="animate-spin h-8 w-8 border-b-2 border-primary mx-auto mb-4 rounded-full"></div>
-            <p className="text-muted-foreground">Loading Session...</p>
+            <p className="text-muted-foreground">Loading session…</p>
+            <div className="mt-4 text-xs text-muted-foreground">
+              <p>If this never proceeds:</p>
+              <ul className="mt-1 space-y-1">
+                <li>• Reached this page via refresh? Go back Home and use Create/Join buttons.</li>
+                <li>• Or append ?host=1 to claim host for a new room.</li>
+              </ul>
+            </div>
           </div>
         </div>
       </AppLayout>

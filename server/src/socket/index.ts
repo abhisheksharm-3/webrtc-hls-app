@@ -18,7 +18,10 @@ import { registerViewerHandlers } from './handlers/viewer';
 export function setupSocket(server: HttpServer): SocketIOServer {
   const io = new SocketIOServer(server, {
     cors: {
-      origin: env.ALLOWED_ORIGINS.split(','), // Allow requests from specified frontend URLs
+      // In development, allow all origins to simplify local testing across localhost/127.0.0.1
+      origin: env.NODE_ENV === 'development'
+        ? ((origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => callback(null, true))
+        : env.ALLOWED_ORIGINS.split(','),
       credentials: true,
     },
     transports: ['websocket', 'polling'], // Standard transport options

@@ -30,15 +30,15 @@ export default function WatchPage() {
     router.push('/');
   };
 
-  // Generate HLS URL (this should come from your server's HLS endpoint)
-  const hlsUrl = (roomCode || routeRoomId) ? `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001'}/hls/${roomCode || routeRoomId}/playlist.m3u8` : null;
+  // Generate HLS URL (allow overriding base URL via NEXT_PUBLIC_HLS_BASE_URL)
+  const hlsBase = (process.env.NEXT_PUBLIC_HLS_BASE_URL || `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001'}/hls`).replace(/\/$/, '');
+  const hlsUrl = (roomCode || routeRoomId) ? `${hlsBase}/${roomCode || routeRoomId}/playlist.m3u8` : null;
   
   const { 
     videoRef, 
     isLoading, 
     isPlaying, 
     error, 
-    viewerCount,
     streamInfo
   } = useHlsPlayer(hlsUrl);
 
@@ -83,12 +83,7 @@ export default function WatchPage() {
               </div>
             </div>
             
-            {viewerCount !== undefined && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Users className="h-4 w-4" />
-                <span>{viewerCount} viewers</span>
-              </div>
-            )}
+            {/* Viewer count could be wired later via Socket.IO if needed */}
           </div>
         </div>
 
@@ -181,12 +176,7 @@ export default function WatchPage() {
                       </Badge>
                     </div>
 
-                    {viewerCount !== undefined && (
-                      <div>
-                        <div className="text-sm font-medium text-muted-foreground mb-1">Viewers</div>
-                        <div className="text-sm">{viewerCount}</div>
-                      </div>
-                    )}
+                    {/* Reserved for viewer metrics */}
                   </div>
 
                   <div className="mt-6 pt-4 border-t">

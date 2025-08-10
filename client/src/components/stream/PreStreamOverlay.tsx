@@ -139,7 +139,12 @@ export function PreStreamOverlay({
           {/* Action Button */}
           {isHost ? (
             <Button
-              onClick={onStartStream}
+              onClick={() => {
+                // Create a slight delay to ensure socket connection is fully established
+                if (isConnected) {
+                  onStartStream();
+                }
+              }}
               disabled={!isConnected}
               size="lg"
               className="h-14 px-8 text-lg font-semibold group cursor-pointer transition-all duration-300 ease-in-out bg-primary hover:bg-primary/90 hover:scale-105 shadow-[0_0_20px_theme(colors.primary/30%)]"

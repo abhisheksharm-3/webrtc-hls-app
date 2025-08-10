@@ -39,22 +39,26 @@ interface TransportConsumerPair {
  * @returns A promise that resolves with the public URL of the HLS playlist.
  */
 export async function startRecording(room: LiveRoom): Promise<{ playlistUrl: string }> {
-  // --- 1. Select the producers to include in the HLS stream ---
-  // For simplicity, we'll take the first active audio and video stream we find.
-  const audioProducer = Array.from(room.participants.values())
-    .flatMap(p => Array.from(p['producers'].values()))
-    .find(p => p.kind === 'audio' && !p.closed);
+  // --- 1. Select producers to include in the HLS stream ---
+  // We support up to 2 video and up to 2 audio producers and composite them.
+  const allProducers = Array.from(room.participants.values())
+    .flatMap(p => Array.from((p as any)['producers'].values() as mediasoupTypes.Producer[]))
+    .filter(p => !p.closed);
 
-  const videoProducer = Array.from(room.participants.values())
-    .flatMap(p => Array.from(p['producers'].values()))
-    .find(p => p.kind === 'video' && !p.closed);
+  const videoProducers = allProducers.filter(p => p.kind === 'video').slice(0, 2);
+  const audioProducers = allProducers.filter(p => p.kind === 'audio').slice(0, 2);
 
-  if (!videoProducer || !audioProducer) {
-    throw new Error(`Required audio and video producers are not available in room ${room.id}`);
+  if (videoProducers.length === 0) {
+    throw new Error(`No video producers available in room ${room.id}`);
+  }
+  if (audioProducers.length === 0) {
+    throw new Error(`No audio producers available in room ${room.id}`);
   }
 
   // --- 2. Create Mediasoup PlainTransports and Consumers ---
-  const { transports, consumers, pairs } = await createHlsTransportsAndConsumers(room.router, [audioProducer, videoProducer]);
+  // Order producers so ffmpeg stream indices are predictable: all videos first, then audios
+  const orderedProducers: mediasoupTypes.Producer[] = [...videoProducers, ...audioProducers];
+  const { transports, consumers, pairs } = await createHlsTransportsAndConsumers(room.router, orderedProducers);
   
   // --- 3. Generate an SDP file for FFmpeg ---
   const sdpString = generateSdp(pairs);
@@ -70,15 +74,49 @@ export async function startRecording(room: LiveRoom): Promise<{ playlistUrl: str
   const command = ffmpeg(sdpPath)
     .inputOptions(['-protocol_whitelist', 'file,udp,rtp'])
     .videoCodec('libx264')
-    .audioCodec('aac')
-    .outputOptions([
-      '-preset', 'ultrafast',
-      '-tune', 'zerolatency',
-      '-hls_time', '4', // 4-second segments
-      '-hls_list_size', '5', // Keep 5 segments in the playlist
-      '-hls_flags', 'delete_segments', // Delete old segments
-    ])
-    .output(playlistPath);
+    .audioCodec('aac');
+
+  // Build complex filter: scale and hstack videos, mix audios
+  const hasTwoVideos = videoProducers.length >= 2;
+  const hasTwoAudios = audioProducers.length >= 2;
+
+  const complexFilters: any[] = [];
+  const videoOutLabel = 'vout';
+  const audioOutLabel = 'aout';
+
+  if (hasTwoVideos) {
+    // 0:v:0, 0:v:1 from SDP
+    complexFilters.push('[0:v:0]scale=960:540[v0]');
+    complexFilters.push('[0:v:1]scale=960:540[v1]');
+    complexFilters.push('[v0][v1]hstack=inputs=2[' + videoOutLabel + ']');
+  } else {
+    // Single video, still scale to 1280x720
+    complexFilters.push('[0:v:0]scale=1280:720[' + videoOutLabel + ']');
+  }
+
+  if (hasTwoAudios) {
+    complexFilters.push('[0:a:0][0:a:1]amix=inputs=2:duration=longest:dropout_transition=3[' + audioOutLabel + ']');
+  } else {
+    // Pass through single audio
+    // Map later directly from 0:a:0
+  }
+
+  if (complexFilters.length > 0) {
+    command.complexFilter(complexFilters);
+  }
+
+  // Output mapping and HLS settings
+  const outputOptions = [
+    '-map', '[' + videoOutLabel + ']',
+    ...(hasTwoAudios ? ['-map', '[' + audioOutLabel + ']'] : ['-map', '0:a:0']),
+    '-preset', 'ultrafast',
+    '-tune', 'zerolatency',
+    '-hls_time', '4',
+    '-hls_list_size', '5',
+    '-hls_flags', 'delete_segments',
+  ];
+
+  command.outputOptions(outputOptions).output(playlistPath);
 
   command
     .on('start', (cmd) => logger.info(`HLS transcoding started for room ${room.id}: ${cmd}`))
@@ -101,12 +139,12 @@ export async function startRecording(room: LiveRoom): Promise<{ playlistUrl: str
   
   // --- 6. Store references for cleanup ---
   room.hlsProcess = ffmpegProcess;
-  
-  // Store HLS data for cleanup - we'll extend the room or use a different approach
-  (room as any).hlsData = { 
-    transports, 
-    consumers, 
-    sdpPath 
+
+  // Store HLS data for cleanup in room.appData.hls
+  room.appData.hls = {
+    transports,
+    consumers,
+    sdpPath,
   } as HlsData;
 
   const playlistUrl = `/hls/${room.id}/playlist.m3u8`;
@@ -126,7 +164,7 @@ export async function stopRecording(room: LiveRoom): Promise<void> {
   }
 
   // Close the associated Mediasoup transports and consumers
-  const hlsData = (room as any).hlsData as HlsData | undefined;
+  const hlsData = room.appData.hls as HlsData | undefined;
   if (hlsData) {
     // Close consumers first
     hlsData.consumers?.forEach((consumer: mediasoupTypes.Consumer) => {
@@ -150,7 +188,7 @@ export async function stopRecording(room: LiveRoom): Promise<void> {
     }
     
     // Clear the HLS data
-    delete (room as any).hlsData;
+    room.appData.hls = undefined as any;
   }
 
   // Clean up HLS segment files
@@ -179,7 +217,7 @@ async function createHlsTransportsAndConsumers(router: mediasoupTypes.Router, pr
         const consumer = await transport.consume({
             producerId: producer.id,
             rtpCapabilities: router.rtpCapabilities,
-            paused: true,
+            paused: false,
         });
         consumers.push(consumer);
         

@@ -27,7 +27,7 @@ export function registerViewerHandlers(io: Server, socket: Socket): void {
       if (!room) {
         return socket.emit('error', { message: 'Stream not found or is not active.' });
       }
-      ``
+      
       // 2. Add the viewer to the room as a participant with isViewer=true.
       // Our services will handle creating the DB record and the in-memory object.
       const participant = await addParticipantToRoom(

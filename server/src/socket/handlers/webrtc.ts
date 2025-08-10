@@ -9,7 +9,8 @@ import { connectTransport, createWebRtcTransport, getTransport } from '../../med
 import { createProducer, getProducer } from '../../mediasoup/producer';
 import { createConsumer, resumeConsumer } from '../../mediasoup/consumer';
 import { getLiveParticipant } from '../../services/ParticipantService';
-import { getLiveRoom } from '../../services/RoomService';
+import { getLiveRoom, updateRoom } from '../../services/RoomService';
+import { startRecording } from '../../services/HLSService';
 
 export function registerWebRtcHandlers(io: Server, socket: Socket): void {
 
@@ -78,6 +79,19 @@ export function registerWebRtcHandlers(io: Server, socket: Socket): void {
         producerId: producer.id,
         participantId: participant.id,
       });
+
+      // Auto-start HLS when the host begins producing both audio and video
+      const room = getLiveRoom(participant.roomId);
+      if (room && participant.isHost && participant.hasAudio && participant.hasVideo && !room.hlsProcess) {
+        try {
+          const { playlistUrl } = await startRecording(room);
+          await updateRoom(room.id, { hlsUrl: playlistUrl });
+          io.to(room.id).emit('hls-started', { roomId: room.id, playlistUrl });
+          logger.info(`✅ Auto-started HLS for room ${room.id}`);
+        } catch (e) {
+          logger.error(`Failed to auto-start HLS for room ${room.id}:`, e);
+        }
+      }
     } catch (error) {
       logger.error(`Error in 'produce' for socket ${socket.id}:`, error);
       callback({ error: (error as Error).message });

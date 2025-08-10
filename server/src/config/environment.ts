@@ -75,9 +75,10 @@ const envSchema = z.object({
   /**
    * A comma-separated list of allowed origins for CORS (Cross-Origin Resource Sharing).
    * This is a security measure to control which frontend URLs can access the API.
-   * @default 'http://localhost:3000'
+   * Default includes both localhost and 127.0.0.1 to match common dev setups.
+   * @default 'http://localhost:3000,http://127.0.0.1:3000'
    */
-  ALLOWED_ORIGINS: z.string().default('http://localhost:3000'),
+  ALLOWED_ORIGINS: z.string().default('http://localhost:3000,http://127.0.0.1:3000'),
 
   /**
    * Force Mediasoup WebRTC transports to use TCP only. Helpful on Windows/dev when UDP is blocked.
