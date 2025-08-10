@@ -17,6 +17,13 @@ export function getLiveRoom(roomId: string): LiveRoom | undefined {
 }
 
 /**
+ * Returns a snapshot array of all currently active live rooms.
+ */
+export function getAllLiveRooms(): LiveRoom[] {
+  return Array.from(liveRooms.values());
+}
+
+/**
  * ✅ CORRECTED: Retrieves a room's data from the database and combines it
  * with live participant data to match the shared 'Room' type.
  */

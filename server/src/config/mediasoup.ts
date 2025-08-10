@@ -50,25 +50,20 @@ export const mediasoupConfig = {
    * WebRtcTransport settings
    */
   webRtcTransport: {
-    // ✅ THIS IS THE FINAL FIX
-    // We force Mediasoup to only listen on the IPv4 loopback address.
-    // This solves the "address type mis-match" issue in Firefox.
-    // In a production environment, you would replace '127.0.0.1' with '0.0.0.0'
-    // and set the `announcedIp`.
     listenIps: [{
-      ip: '127.0.0.1',
-      announcedIp: undefined, // Not needed for localhost
+      ip: env.MEDIASOUP_LISTEN_IP,
+      announcedIp: env.NODE_ENV === 'production' ? env.MEDIASOUP_ANNOUNCED_IP : undefined,
     }],
-    enableUdp: true,
+    enableUdp: env.MEDIASOUP_FORCE_TCP ? false : true,
     enableTcp: true,
-    preferUdp: true,
-    initialAvailableOutgoingBitrate: 1000000,
+    preferUdp: env.MEDIASOUP_FORCE_TCP ? false : true,
+    initialAvailableOutgoingBitrate: 1_000_000,
   } as mediasoupTypes.WebRtcTransportOptions,
 
   /**
    * PlainTransport settings for server-side processes like HLS recording.
    */
   plainTransport: {
-    listenIp: { ip: '127.0.0.1' },
+    listenIp: { ip: env.MEDIASOUP_LISTEN_IP },
   } as mediasoupTypes.PlainTransportOptions,
 };

@@ -1,65 +1,42 @@
-# WebRTC-HLS Server
+## WebRTC-HLS Server
 
-This is the backend server for the WebRTC-HLS Streaming Platform. It is built with Express.js, Mediasoup, Prisma ORM, and supports scalable WebRTC streaming and HLS broadcasting.
+Express API with Socket.IO signaling and Mediasoup for SFU. Prisma/PostgreSQL persists rooms/participants. FFmpeg generates HLS segments served from `/hls`.
 
-## Features
-- Mediasoup SFU for low-latency WebRTC streaming
-- Socket.io for real-time signaling and room management
-- FFmpeg integration for HLS transcoding
-- PostgreSQL with Prisma ORM for persistent storage
-- Redis for session management and caching
-- RESTful and WebSocket APIs
+### Key Features
+- Mediasoup workers/routers/transports management
+- WebRTC signaling via Socket.IO
+- HLS broadcast with FFmpeg
+- Validated environment via Zod
+- Structured logging with Winston
 
-## Project Structure
+### Environment
+- NODE_ENV=development
+- PORT=3001
+- DATABASE_URL=postgresql://user:pass@localhost:5432/webrtc_hls
+- ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+- MEDIASOUP_LISTEN_IP=127.0.0.1 (set 0.0.0.0 in production)
+- MEDIASOUP_ANNOUNCED_IP=127.0.0.1 (public IP in prod)
+- MEDIASOUP_MIN_PORT=40000
+- MEDIASOUP_MAX_PORT=49999
+- MEDIASOUP_FORCE_TCP= (optional truthy to force TCP)
+- HLS_STORAGE_PATH=./storage/hls
+- FFMPEG_PATH=/usr/bin/ffmpeg
 
-```
-server/
-├── src/
-│   ├── config/         # Configuration files (database, mediasoup, environment)
-│   ├── mediasoup/      # Mediasoup worker, router, producer, consumer, transport
-│   ├── models/         # Prisma models (Participant, Room, Stream)
-│   ├── routes/         # Express routes (health, hls, rooms)
-│   ├── services/       # Business logic (HLSService, RoomService, etc.)
-│   ├── socket/         # Socket.io handlers
-│   └── utils/          # Helpers and logger
-├── prisma/             # Prisma schema
-├── logs/               # Winston log files
-├── package.json        # Server dependencies and scripts
-└── tsconfig.json       # TypeScript configuration
-```
+### Scripts
+- dev: tsx watch (NODE_ENV=development)
+- build: tsc
+- start: node dist (NODE_ENV=production)
+- prisma helpers: db:generate, db:push, db:migrate
 
-## Development
+### REST API
+- GET /api/health, GET /api/health/mediasoup
+- GET /api/rooms, POST /api/rooms { id, name }, GET /api/rooms/:roomId, DELETE /api/rooms/:roomId
+- GET /api/hls/streams, GET /api/hls/streams/:roomId
 
-1. Install dependencies:
-   ```bash
-   cd server
-   npm install
-   ```
-2. Setup environment variables:
-   ```bash
-   cp .env.example .env
-   # Edit .env as needed
-   ```
-3. Run database migrations:
-   ```bash
-   npx prisma migrate dev
-   ```
-4. Start the server:
-   ```bash
-   npm run dev
-   ```
+### Socket Events
+- Client->Server: join-room, leave-room, create-transport, connect-transport, produce, consume, start-hls, stop-hls
+- Server->Client: room-joined, new-participant, participant-left, new-producer, hls-started, hls-stopped, error
 
-## Production
-
-- Build and start:
-  ```bash
-  npm run build
-  npm start
-  ```
-
-## API
-- REST endpoints: `/api/*`
-- WebSocket: `/socket.io/`
-
-## License
-MIT
+### Notes
+- Set MEDIASOUP_LISTEN_IP=0.0.0.0 and MEDIASOUP_ANNOUNCED_IP to your public IP in production
+- Ensure ffmpeg is installed and FFMPEG_PATH points to it

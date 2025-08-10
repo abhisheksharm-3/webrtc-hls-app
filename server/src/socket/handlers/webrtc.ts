@@ -68,6 +68,12 @@ export function registerWebRtcHandlers(io: Server, socket: Socket): void {
       if (!transport) throw new Error('Transport not found.');
 
       const producer = await createProducer(transport, data.kind, data.rtpParameters);
+      // Attach routerId to producer's appData for stats/queries
+      producer.appData = {
+        ...producer.appData,
+        routerId: (transport.appData as any).routerId,
+        transport: transport,
+      };
       participant.addProducer(producer);
       
       if (data.kind === 'video') participant.hasVideo = true;

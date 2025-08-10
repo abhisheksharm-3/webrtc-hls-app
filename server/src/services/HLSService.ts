@@ -123,22 +123,17 @@ export async function startRecording(room: LiveRoom): Promise<{ playlistUrl: str
     .on('error', (err) => logger.error(`HLS transcoding error for room ${room.id}:`, err))
     .on('end', () => logger.info(`HLS transcoding ended for room ${room.id}`));
 
-  // Store reference to the underlying child process
-  let ffmpegProcess: ChildProcess | undefined;
-  
-  // Get the process after running
+  // When ffmpeg actually starts, capture the underlying child process
   command.on('start', () => {
-    // Access the internal process - this is a workaround since ffmpegProc doesn't exist
-    ffmpegProcess = (command as any)._getArguments ? (command as any)._getArguments() : undefined;
-    if ((command as any).ffmpegProc) {
-      ffmpegProcess = (command as any).ffmpegProc;
+    const proc: ChildProcess | undefined = (command as any).ffmpegProc;
+    if (proc) {
+      room.hlsProcess = proc;
     }
   });
 
   command.run();
   
   // --- 6. Store references for cleanup ---
-  room.hlsProcess = ffmpegProcess;
 
   // Store HLS data for cleanup in room.appData.hls
   room.appData.hls = {

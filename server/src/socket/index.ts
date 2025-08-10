@@ -24,7 +24,8 @@ export function setupSocket(server: HttpServer): SocketIOServer {
         : env.ALLOWED_ORIGINS.split(','),
       credentials: true,
     },
-    transports: ['websocket', 'polling'], // Standard transport options
+    transports: ['websocket', 'polling'],
+    path: '/socket.io',
   });
 
   // This runs for every single client that connects to the server

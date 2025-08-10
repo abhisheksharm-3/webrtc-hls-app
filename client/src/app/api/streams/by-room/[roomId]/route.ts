@@ -18,7 +18,7 @@ export async function GET(
     const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001';
     
     // Try to fetch the specific stream from the backend server
-    const response = await fetch(`${serverUrl}/api/hls/room/${roomId}`, {
+    const response = await fetch(`${serverUrl}/api/hls/streams/${roomId}`, {
       headers: {
         'Content-Type': 'application/json',
       },

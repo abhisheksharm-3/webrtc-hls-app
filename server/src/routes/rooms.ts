@@ -3,7 +3,7 @@
  */
 import { Router, Request, Response } from 'express';
 import { logger } from '../utils/logger';
-import { closeRoom, createRoom, findOrCreateLiveRoom, getAllRoomsFromDb, getRoomFromDb } from '../services/RoomService';
+import { closeRoom, createRoom, getAllRoomsFromDb, getRoomFromDb } from '../services/RoomService';
 // import { createRoomSchema } from '../utils/validation';
 
 const router = Router();
@@ -28,15 +28,11 @@ router.get('/', async (req: Request, res: Response) => {
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
-    // ✅ Expect both a unique 'id' and a descriptive 'name' from the client.
-    const { id, name } = req.body;
-
+    const { id, name } = req.body as { id?: string; name?: string };
     if (!id || !name) {
       return res.status(400).json({ message: 'Both room ID and name are required.' });
     }
 
-    // This service function should be updated to use the provided ID.
-    // The `findOrCreateLiveRoom` function should prioritize finding a room by its ID.
     const liveRoom = await createRoom(id, name);
 
     if (!liveRoom) {

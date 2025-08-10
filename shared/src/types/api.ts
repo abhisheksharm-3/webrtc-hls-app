@@ -2,6 +2,7 @@
  * Shape of the request body for creating a new room.
  */
 export interface CreateRoomRequest {
+  id: string;
   name: string;
 }
 
@@ -9,6 +10,6 @@ export interface CreateRoomRequest {
  * Shape of the response after successfully creating a room.
  */
 export interface CreateRoomResponse {
-  roomId: string;
-  hlsUrl: string;
+  id: string;
+  hlsUrl?: string;
 }

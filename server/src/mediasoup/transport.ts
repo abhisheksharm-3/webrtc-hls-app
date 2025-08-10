@@ -26,6 +26,8 @@ export async function createWebRtcTransport(
     // Associate the router with this transport for later canConsume checks.
     transport.appData.router = router;
     transport.appData.routerId = router.id;
+    // Helpful for correlating producers later
+    transport.appData.transportId = transport.id;
 
     // When the transport is closed for any reason, remove it from our map.
     transport.on('@close', () => {

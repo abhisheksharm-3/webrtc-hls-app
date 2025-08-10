@@ -5,7 +5,7 @@
  */
 import { Router, Request, Response } from 'express';
 import { logger } from '../utils/logger';
-import { getAllLiveRooms, getLiveRoom, getRoomFromDb } from '../services/RoomService';
+import { getAllLiveRooms, getLiveRoom } from '../services/RoomService';
 
 const router = Router();
 
@@ -54,13 +54,11 @@ router.get('/streams/:roomId', async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'No active stream found for this room.' });
     }
 
-    // Get the full room details from the database for extra info
-    const dbRoom = await getRoomFromDb(roomId);
     const participants = Array.from(room.participants.values());
 
     res.status(200).json({
       id: room.id,
-      title: dbRoom?.name || 'Live Stream',
+      title: room.router.appData.name || 'Live Stream',
       hlsUrl: room.router.appData.hlsUrl,
       isLive: true,
       participantCount: participants.length,

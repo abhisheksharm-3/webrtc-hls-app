@@ -10,7 +10,7 @@ A complete production-grade WebRTC to HLS streaming platform built with TypeScri
 - **Real-time Communication**: Socket.io for instant room management and signaling
 - **Production Architecture**: Separated client/server with TypeScript compliance
 - **Scalable Backend**: Express.js with Prisma ORM and PostgreSQL
-- **Modern Frontend**: Next.js 15 with React 18 and Tailwind CSS
+- **Modern Frontend**: Next.js 15 with React 19 and Tailwind CSS
 - **Docker Support**: Complete containerization for easy deployment
 
 ## 🏗️ Architecture
@@ -87,7 +87,7 @@ make prod     # Production mode
 
 For detailed Docker deployment instructions, see [DOCKER_DEPLOYMENT.md](./DOCKER_DEPLOYMENT.md).
 
-### Development Setup
+### Development Setup (Monorepo)
 
 1. **Clone and Install Dependencies**
 ```bash
@@ -107,7 +107,7 @@ npm run db:setup
 
 3. **Start Development Servers**
 ```bash
-# Start both client and server in development mode
+# Build shared types and start both client and server in development mode
 npm run dev
 ```
 

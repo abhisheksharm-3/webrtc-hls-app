@@ -84,9 +84,9 @@ export function closeProducer(producerId: string): void {
 export function getProducersForRouter(routerId: string): mediasoupTypes.Producer[] {
   const producersForRouter: mediasoupTypes.Producer[] = [];
   for (const producer of producers.values()) {
-    // A producer belongs to a router via its transport.
-    const transport = producer.appData.transport as mediasoupTypes.Router;
-    if (transport && transport.appData && transport.appData.routerId === routerId) {
+    const transportRouterId = (producer.appData?.routerId as string | undefined) ||
+      (producer.appData?.transport as any)?.appData?.routerId;
+    if (transportRouterId === routerId) {
       producersForRouter.push(producer);
     }
   }

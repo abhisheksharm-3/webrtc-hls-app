@@ -1,11 +1,12 @@
 import { z } from 'zod';
 
 export const CreateRoomSchema = z.object({
+  id: z.string().min(6),
   name: z.string().min(1).max(50),
 });
 
 export const JoinRoomSchema = z.object({
-  roomId: z.string().uuid(),
+  roomId: z.string().min(6),
 });
 
 export const ProduceSchema = z.object({

@@ -2,9 +2,9 @@
   "name": "server",
   "version": "1.0.0",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "cross-env NODE_ENV=development tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "cross-env NODE_ENV=production node dist/index.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev"
@@ -31,6 +31,7 @@
     "@types/uuid": "^9.0.2",
     "@types/node": "^20.4.5",
     "tsx": "^3.12.7",
+    "cross-env": "^7.0.3",
     "typescript": "^5.1.6"
   }
 }

@@ -48,6 +48,7 @@ async function startServer() {
     app.use('/api/health', healthRoutes);
     app.use('/health', healthRoutes);
     app.use('/api/rooms', roomRoutes);
+    app.use('/api/hls', hlsRoutes);
     // Note: The '/hls' route is used for both static files and potential API calls (like getting a playlist)
 
     // --- 4. Setup Socket.IO Server ---
