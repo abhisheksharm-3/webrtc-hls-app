@@ -1,15 +1,16 @@
+"use client"
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useRoomActions } from '@/hooks/useRoomActions';
 import { ArrowRight } from 'lucide-react';
 
-interface QuickJoinSectionProps {
-  roomId: string;
-  setRoomId: (value: string) => void;
-  onJoinRoom: () => void;
-  onWatchRoom?: () => void;
-}
-
-export function QuickJoinSection({ roomId, setRoomId, onJoinRoom, onWatchRoom }: QuickJoinSectionProps) {
+export function QuickJoinSection() {
+    const {
+      roomId,
+      setRoomId,
+      handleJoinRoom: onJoinRoom,
+      handleWatchRoom: onWatchRoom,
+    } = useRoomActions();
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       onJoinRoom();

@@ -1,10 +1,8 @@
+"use client"
 import { Button } from '@/components/ui/button';
+import { useRoomActions } from '@/hooks/useRoomActions';
 import { Video, Eye, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
-
-interface CTASectionProps {
-  onCreateRoom: () => void;
-}
 
 const stats = [
     { value: '10K+', label: 'Active Streamers' },
@@ -12,7 +10,10 @@ const stats = [
     { value: '99.9%', label: 'Uptime' },
 ];
 
-export function CTASection({ onCreateRoom }: CTASectionProps) {
+export function CTASection() {
+    const {
+      handleCreateRoom: onCreateRoom,
+    } = useRoomActions();
   return (
     <section className="relative py-24 sm:py-32">
         {/* Adds consistency with other sections */}

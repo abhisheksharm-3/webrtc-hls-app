@@ -1,3 +1,4 @@
+"use client"
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,14 +26,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import Hyperspeed from '../ui/backgrounds/Hyperspeed/Hyperspeed';
-
-interface HeroSectionProps {
-  onCreateRoom: () => void;
-  onJoinRoom: () => void;
-  onWatchRoom?: () => void;
-  roomId: string;
-  setRoomId: (value: string) => void;
-}
+import { useRoomActions } from '@/hooks/useRoomActions';
 
 interface FeatureCardProps {
   icon: React.ElementType;
@@ -58,7 +52,14 @@ const FeatureCard = ({ icon, title, description, colorClass }: FeatureCardProps)
 };
 
 
-export function HeroSection({ onCreateRoom, onJoinRoom, onWatchRoom, roomId, setRoomId }: HeroSectionProps) {
+export function HeroSection() {
+    const {
+      roomId,
+      setRoomId,
+      handleJoinRoom: onJoinRoom,
+      handleWatchRoom: onWatchRoom,
+      handleCreateRoom: onCreateRoom
+    } = useRoomActions();
   const [showJoinDialog, setShowJoinDialog] = useState(false);
   const [joinMode, setJoinMode] = useState<'participate' | 'watch'>('participate');
 

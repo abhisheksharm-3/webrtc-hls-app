@@ -3,3 +3,4 @@ export * from './types/socket-events';
 export * from './types/api';
 export * from './types/mediasoup';
 export * from './utils/validation';
+export * from './types/stream';

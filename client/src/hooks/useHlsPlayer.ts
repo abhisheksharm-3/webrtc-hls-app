@@ -1,10 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Hls, { Events as HlsEvents, ErrorTypes, ErrorData } from 'hls.js';
-
-interface StreamInfo {
-  resolution?: { width: number; height: number };
-  bitrate?: number;
-}
+import {StreamInfoType} from '@relay-app/shared'
 
 /**
  * A custom React hook to manage an HLS video player.
@@ -23,7 +19,7 @@ export const useHlsPlayer = (url: string | null) => {
   const [isMuted, setIsMuted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [streamInfo, setStreamInfo] = useState<StreamInfo | null>(null);
+  const [streamInfo, setStreamInfo] = useState<StreamInfoType | null>(null);
 
   // --- Player Actions ---
 
