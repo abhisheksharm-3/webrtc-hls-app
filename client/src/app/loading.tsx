@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, CheckCircle, Radio } from 'lucide-react';
 import Hyperspeed from '@/components/ui/backgrounds/Hyperspeed/Hyperspeed';
-import { funFacts, hyperspeedConfig, loadingSteps } from '@/lib/loading-config';
+import { funFacts, hyperspeedConfig, loadingSteps } from '@/lib/config/loading-config';
 
 // --- Child Components (can be moved to separate files) ---
 

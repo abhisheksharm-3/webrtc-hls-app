@@ -25,7 +25,6 @@ export const useRoomActions = () => {
   const handleCreateRoom = async () => {
     try {
       const newRoomId = generateRoomId();
-      // ✅ Bug Fix: Generate name once and reuse it.
       const hostName = generateDisplayName("Host");
       const newRoomName = `New Stream by ${hostName}`;
 

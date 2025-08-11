@@ -4,30 +4,29 @@ import { devtools, persist } from 'zustand/middleware';
 export type UserRole = 'host' | 'guest' | 'viewer';
 
 /**
- * Defines the shape of the global application state.
+ * @description The details required to join a room.
+ */
+export type SessionDetails = {
+  roomCode: string;
+  userName: string;
+  role: UserRole;
+};
+
+/**
+ * @description Defines the shape of the global application state and its actions.
  */
 export interface AppState {
   // Session state
   roomCode: string | null;
-  userName: string | null;
+  userName:string | null;
   userRole: UserRole | null;
   isInRoom: boolean;
-  
-  // Actions to modify the state
-  joinRoom: (details: { roomCode: string, userName: string, role: UserRole }) => void;
+
+  // Actions
+  joinRoom: (details: SessionDetails) => void;
   leaveRoom: () => void;
   setUserName: (name: string) => void;
 }
-
-/**
- * The initial state when the application loads.
- */
-const initialState = {
-  roomCode: null,
-  userName: null,
-  userRole: null,
-  isInRoom: false,
-};
 
 /**
  * The main Zustand store for global application state.
@@ -37,36 +36,42 @@ const initialState = {
 export const useAppStore = create<AppState>()(
   devtools(
     persist(
-      (set) => ({
-        ...initialState,
-        
-        /**
-         * Sets the user's state for joining a room.
-         * This is the primary action for entering a stream or watch page.
-         */
-        joinRoom: (details) => set({
-          roomCode: details.roomCode,
-          userName: details.userName,
-          userRole: details.role,
-          isInRoom: true,
-        }),
-        
-        /**
-         * Resets the session state when a user leaves a room.
-         */
-        leaveRoom: () => set({
-          ...initialState
-        }),
+      (set) => {
+        // ✅ Define the initial state inside the creator function.
+        const initialState = {
+          roomCode: null,
+          userName: null,
+          userRole: null,
+          isInRoom: false,
+        };
 
-        /**
-         * Updates the user's name.
-         */
-        setUserName: (name: string) => set({
-          userName: name
-        }),
-      }),
+        return {
+          ...initialState,
+
+          /**
+           * Sets the user's state for joining a room.
+           */
+          joinRoom: (details) => set({
+            roomCode: details.roomCode,
+            userName: details.userName,
+            userRole: details.role,
+            isInRoom: true,
+          }),
+
+          /**
+           * Resets the session state to its initial values when a user leaves a room.
+           */
+          leaveRoom: () => set(initialState),
+
+          /**
+           * Updates the user's name.
+           */
+          setUserName: (name: string) => set({
+            userName: name
+          }),
+        };
+      },
       {
-        // Configuration for the persistence middleware
         name: 'app-session-storage', // The key to use in localStorage
       }
     )

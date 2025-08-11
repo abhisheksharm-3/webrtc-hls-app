@@ -36,7 +36,6 @@ const StreamLoading = () => (
  * @param {StreamErrorProps} props - The component props.
  * @returns {JSX.Element} The error card UI.
  */
-// FIX 1: Added explicit types for props to resolve 'implicitly has an any type' errors.
 const StreamError = ({ error, onGoHome }: { error: string; onGoHome: () => void; }) => (
   <AppLayout>
     <div className="flex items-center justify-center h-screen p-4">
@@ -69,11 +68,6 @@ export default function StreamPage() {
   const routeRoomId = params?.roomId as string;
 
   const { roomCode, userName, userRole, leaveRoom, joinRoom } = useAppStore();
-
-  // FIX 2: Provided fallback values ('') for state variables that can be `null` on the
-  // initial render. This satisfies the `useWebRTCStream` hook's expectation of `string`
-  // arguments. The component's logic prevents this hook from being used meaningfully
-  // until the state is properly populated.
   const streamHook = useWebRTCStream(
     roomCode || '', 
     userName || '', 
@@ -141,7 +135,6 @@ export default function StreamPage() {
             <VideoStage
               localVideoRef={streamHook.localVideoRef}
               participants={streamHook.participants}
-              // FIX 3: Coalesced `null` to `undefined` to match the expected prop type `string | undefined`.
               selfId={streamHook.selfId ?? undefined}
               getRemoteVideoRef={streamHook.getRemoteVideoRef}
               userRole={userRole}
@@ -160,10 +153,8 @@ export default function StreamPage() {
 
           <StreamSidebar
             participants={streamHook.participants}
-            // FIX 3 (repeated): Coalesced `null` to `undefined` here as well.
             selfId={streamHook.selfId ?? undefined}
             hlsUrl={streamHook.hlsUrl}
-            onCopyToClipboard={streamHook.actions.copyToClipboard}
             roomCode={roomCode}
             userRole={userRole}
           />

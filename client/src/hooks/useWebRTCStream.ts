@@ -1,98 +1,14 @@
 "use client";
 
-import {
-  useEffect,
-  useReducer,
-  useRef,
-  useCallback,
-  useMemo,
-  useState,
-} from "react";
+import { useEffect, useReducer, useRef, useCallback, useState, useMemo } from "react";
 import { io, Socket } from "socket.io-client";
-import { Device } from "mediasoup-client";
-import type {
-  Consumer,
-  Producer,
-  Transport,
-  RtpParameters,
-} from "mediasoup-client/types";
-import { Participant, WebRtcTransportParams } from "@relay-app/shared";
 import { MediaDeviceStatus, RemoteStream } from "@/lib/types/stream-types";
+import { ClientToServerEvents, ServerToClientEvents } from "@relay-app/shared";
+import { initialState, webrtcReducer } from "@/lib/webrtc-utils/reducer";
+import { createMediasoupManager, MediasoupManager } from "@/lib/webrtc-utils/MediasoupManager";
 
-// --- Constants ---
-const SOCKET_EVENTS = {
-  CONNECT: "connect",
-  DISCONNECT: "disconnect",
-  JOIN_ROOM: "join-room",
-  ROOM_JOINED: "room-joined",
-  NEW_PARTICIPANT: "new-participant",
-  PARTICIPANT_LEFT: "participant-left",
-  NEW_PRODUCER: "new-producer",
-  PRODUCER_CLOSED: "producer-closed",
-  CREATE_TRANSPORT: "create-transport",
-  CONNECT_TRANSPORT: "connect-transport",
-  PRODUCE: "produce",
-  CONSUME: "consume",
-  START_HLS: "start-hls",
-  STOP_HLS: "stop-hls",
-  HLS_STARTED: "hls-started",
-  HLS_STOPPED: "hls-stopped",
-} as const;
+type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
-
-// --- State Management (Reducer) ---
-interface WebRTCState {
-  participants: Participant[];
-  producers: Map<string, Producer>;
-  consumers: Map<string, Consumer>;
-}
-
-type WebRTCAction =
-  | { type: "ROOM_JOINED"; payload: { participants: Participant[] } }
-  | { type: "NEW_PARTICIPANT"; payload: { participant: Participant } }
-  | { type: "PARTICIPANT_LEFT"; payload: { participantId: string } }
-  | { type: "ADD_PRODUCER"; payload: { producer: Producer } }
-  | { type: "ADD_CONSUMER"; payload: { consumer: Consumer } }
-  | {
-      type: "UPDATE_PARTICIPANT";
-      payload: { participantId: string; patch: Partial<Participant> };
-    }
-  | { type: "RESET_STATE" };
-
-const initialState: WebRTCState = {
-  participants: [],
-  producers: new Map(),
-  consumers: new Map(),
-};
-
-function webrtcReducer(state: WebRTCState, action: WebRTCAction): WebRTCState {
-    switch (action.type) {
-    case "ROOM_JOINED":
-      return { ...state, participants: action.payload.participants };
-    case "NEW_PARTICIPANT":
-      if (state.participants.some((p) => p.id === action.payload.participant.id)) return state;
-      return { ...state, participants: [...state.participants, action.payload.participant] };
-    case "PARTICIPANT_LEFT":
-      return { ...state, participants: state.participants.filter(p => p.id !== action.payload.participantId) };
-    case "ADD_PRODUCER":
-      return { ...state, producers: new Map(state.producers).set(action.payload.producer.id, action.payload.producer) };
-    case "ADD_CONSUMER":
-      return { ...state, consumers: new Map(state.consumers).set(action.payload.consumer.id, action.payload.consumer) };
-    case "UPDATE_PARTICIPANT":
-      return {
-        ...state,
-        participants: state.participants.map(p =>
-          p.id === action.payload.participantId ? { ...p, ...action.payload.patch } : p
-        ),
-      };
-    case "RESET_STATE":
-      return initialState;
-    default:
-      return state;
-  }
-}
-
-// --- The Main Hook ---
 export const useWebRTCStream = (roomId: string, name: string, role: string | null) => {
   const [state, dispatch] = useReducer(webrtcReducer, initialState);
   const [isConnected, setIsConnected] = useState(false);
@@ -104,42 +20,19 @@ export const useWebRTCStream = (roomId: string, name: string, role: string | nul
   const [remoteStreams, setRemoteStreams] = useState<Map<string, RemoteStream>>(new Map());
   const [selfId, setSelfId] = useState<string | null>(null);
 
-  // --- Refs ---
-  const socketRef = useRef<Socket | null>(null);
-  const deviceRef = useRef<Device | null>(null);
-  const sendTransportRef = useRef<Transport | null>(null);
-  const recvTransportRef = useRef<Transport | null>(null);
+  const socketRef = useRef<TypedSocket | null>(null);
+  const mediasoupManagerRef = useRef<MediasoupManager | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRefs = useRef<Map<string, HTMLVideoElement | null>>(new Map());
-  const producersRef = useRef<Map<string, Producer>>(new Map());
-  const nameRef = useRef(name);
-  const roleRef = useRef(role);
-  
-  const isCleaningUpRef = useRef(false);
-  
-  const createTransportRef = useRef<any>();
-  const consumeRemoteProducerRef = useRef<any>();
 
-  // --- Memoized Values ---
-  const resolvedName = useMemo(() => (name && name.trim().length > 0) ? name : `User-${Math.random().toString(36).slice(2, 6)}`, [name]);
-  const resolvedRole = useMemo(() => role || "guest", [role]);
-  
-const socketUrl = useMemo(() => {
-    if (typeof window === "undefined") return ""; // Prevent server-side execution
-    
-    // Check the protocol (http: or https:)
+  const socketUrl = useMemo(() => {
+    if (typeof window === "undefined") return "";
     const protocol = window.location.protocol;
     const hostname = window.location.hostname;
-    
-    // For ngrok/production, the port is handled by the proxy, so we don't need to add it.
-    // For local development, we connect directly to the port.
     const isLocal = hostname === "localhost";
     const port = isLocal ? ":3001" : "";
-    
-    // Use wss:// for https:// pages, and ws:// for http://
     const wsProtocol = protocol === "https:" ? "wss://" : "ws://";
-
     return `${wsProtocol}${hostname}${port}`;
   }, []);
 
@@ -154,7 +47,6 @@ const socketUrl = useMemo(() => {
     }
   }, []);
 
-  // --- Callbacks ---
   const handleError = useCallback((err: Error | string, context?: string) => {
     const message = err instanceof Error ? err.message : err;
     const errorMessage = context ? `${context}: ${message}` : message;
@@ -162,273 +54,173 @@ const socketUrl = useMemo(() => {
     setError(errorMessage);
   }, []);
 
-  const createSocketPromise = useCallback(<T extends object>(event: string, data: Record<string, unknown>): Promise<T> => {
-      return new Promise((resolve, reject) => {
-        if (!socketRef.current?.connected) return reject(new Error('Socket not connected.'));
-        socketRef.current.emit(event, data, (response: { error?: string } & T) => {
-          if (response.error) reject(new Error(response.error));
-          else resolve(response);
-        });
-      });
-    }, []);
-
-  const createTransport = useCallback(async (direction: "send" | "recv"): Promise<Transport> => {
-    if (!deviceRef.current) throw new Error("Device not initialized");
-    const params = await createSocketPromise<WebRtcTransportParams>(SOCKET_EVENTS.CREATE_TRANSPORT, { direction });
-    
-    const transport = direction === "send"
-      ? deviceRef.current.createSendTransport({ ...params, iceServers })
-      : deviceRef.current.createRecvTransport({ ...params, iceServers });
-
-    transport.on("connect", async ({ dtlsParameters }, callback, errback) => {
-      try {
-        await createSocketPromise(SOCKET_EVENTS.CONNECT_TRANSPORT, { transportId: transport.id, dtlsParameters });
-        callback();
-      } catch (err) { errback(err as Error) }
-    });
-
-    if (direction === "send") {
-      transport.on("produce", async ({ kind, rtpParameters }, callback, errback) => {
-        try {
-          const { id } = await createSocketPromise<{ id: string }>(SOCKET_EVENTS.PRODUCE, { transportId: transport.id, kind, rtpParameters });
-          callback({ id });
-          if (selfId) {
-            if (kind === "video") dispatch({ type: "UPDATE_PARTICIPANT", payload: { participantId: selfId, patch: { hasVideo: true } } });
-            if (kind === "audio") dispatch({ type: "UPDATE_PARTICIPANT", payload: { participantId: selfId, patch: { hasAudio: true } } });
-          }
-        } catch (err) { errback(err as Error) }
-      });
-    }
-    return transport;
-  }, [createSocketPromise, selfId, iceServers]);
-
-  const consumeRemoteProducer = useCallback(async (producerId: string, participantId: string) => {
-    if (!deviceRef.current || !recvTransportRef.current) return;
-    try {
-      const consumerData = await createSocketPromise<{ id: string; kind: "audio" | "video"; rtpParameters: RtpParameters; }>(
-        SOCKET_EVENTS.CONSUME, { producerId, rtpCapabilities: deviceRef.current.rtpCapabilities, }
-      );
-      const consumer = await recvTransportRef.current.consume({ ...consumerData, producerId, appData: { participantId }, });
-      dispatch({ type: "ADD_CONSUMER", payload: { consumer } });
-      setRemoteStreams(prev => {
-        const newMap = new Map(prev);
-        const existingStream = newMap.get(participantId) || {};
-        const trackKey = consumer.kind === "video" ? "videoTrack" : "audioTrack";
-        newMap.set(participantId, { ...existingStream, [trackKey]: consumer.track, });
-        return newMap;
-      });
-    } catch (err) { handleError(err as Error, `Consume producer ${producerId}`) }
-  }, [createSocketPromise, handleError]);
-  
   const cleanup = useCallback(() => {
     console.log("Cleaning up WebRTC resources...");
-    producersRef.current.forEach((p) => p.close());
-    sendTransportRef.current?.close();
-    recvTransportRef.current?.close();
+    mediasoupManagerRef.current?.close();
     localStreamRef.current?.getTracks().forEach((track) => track.stop());
-    if (socketRef.current) {
-        socketRef.current.disconnect();
-        socketRef.current = null;
-    }
+    socketRef.current?.disconnect();
+    
     dispatch({ type: "RESET_STATE" });
+    setIsConnected(false);
     setIsStreaming(false);
+    setHlsUrl(null);
+    setIsHlsEnabled(false);
+    setRemoteStreams(new Map());
     setSelfId(null);
+    setError(null);
   }, []);
 
-  // --- Effects ---
   useEffect(() => {
-    nameRef.current = resolvedName;
-    roleRef.current = resolvedRole;
-    createTransportRef.current = createTransport;
-    consumeRemoteProducerRef.current = consumeRemoteProducer;
-  });
+    if (!roomId || !name || !role) return;
 
-  useEffect(() => {
-    producersRef.current = state.producers;
-  }, [state.producers]);
-
-  useEffect(() => {
-    if (!roomId) return;
-    isCleaningUpRef.current = false;
-
-    const socket = io(socketUrl, {
-      transports: ["websocket", "polling"],
-      path: "/socket.io",
-    });
+    const socket = io(socketUrl, { transports: ["websocket"], path: "/socket.io" });
     socketRef.current = socket;
+    const msManager = createMediasoupManager(socket, iceServers);
+    mediasoupManagerRef.current = msManager;
 
-    const onConnect = () => {
-      console.log(`✅ Socket connected! Client ID: ${socket.id}`);
+    socket.on("connect", () => {
       setIsConnected(true);
-      socket.emit(SOCKET_EVENTS.JOIN_ROOM, { roomId, name: nameRef.current, role: roleRef.current });
-    };
+      socket.emit("join-room", { roomId, name, role }, (res: { error: string | Error; }) => {
+        if (res.error) handleError(res.error, "Joining Room");
+      });
+    });
 
-    const onDisconnect = () => {
-      console.log("❌ Socket disconnected.");
-      handleError("You have been disconnected from the server.");
-      setIsConnected(false);
-    };
-    
-    const onRoomJoined = async (data: any) => {
-        dispatch({ type: "ROOM_JOINED", payload: { participants: data.room.participants } });
-        setSelfId(data.participantId);
+    socket.on("room-joined", async (data) => {
+      dispatch({ type: "ROOM_JOINED", payload: { participants: data.room.participants } });
+      setSelfId(data.participantId);
+      setIsHlsEnabled(data.isHlsEnabled);
+      if(data.hlsUrl) setHlsUrl(data.hlsUrl);
 
-        if (data.routerRtpCapabilities) {
-            try {
-                const device = new Device();
-                await device.load({ routerRtpCapabilities: data.routerRtpCapabilities });
-                deviceRef.current = device;
-                
-                recvTransportRef.current = await (createTransportRef.current as any)("recv");
+      await msManager.loadDevice(data.routerRtpCapabilities);
+      await msManager.createTransport("recv");
 
-                if (data.existingProducers?.length) {
-                    for (const { producerId, participantId } of data.existingProducers) {
-                        await (consumeRemoteProducerRef.current as any)(producerId, participantId);
-                    }
-                    if (data.existingProducers.length > 0) {
-                        setIsStreaming(true);
-                    }
-                }
-            } catch (err) {
-                handleError(err as Error, "Device initialization or transport creation");
-            }
+      for (const { producerId, participantId } of data.existingProducers) {
+        const consumer = await msManager.consume(producerId, participantId);
+        if (consumer) dispatch({ type: "ADD_CONSUMER", payload: { consumer } });
+      }
+      if(data.existingProducers.length > 0) setIsStreaming(true);
+    });
+
+    socket.on("new-participant", ({ participant }) => dispatch({ type: "NEW_PARTICIPANT", payload: { participant }}));
+    socket.on("participant-left", ({ participantId }) => dispatch({ type: "PARTICIPANT_LEFT", payload: { participantId }}));
+    socket.on("new-producer", async ({ producerId, participantId }) => {
+        const consumer = await msManager.consume(producerId, participantId);
+        if (consumer) dispatch({ type: "ADD_CONSUMER", payload: { consumer } });
+    });
+    socket.on("producer-closed", ({ producerId }) => {
+        const consumer = Array.from(state.consumers.values()).find(c => c.producerId === producerId);
+        if (consumer) {
+            consumer.close();
+            dispatch({ type: "REMOVE_CONSUMER", payload: { consumerId: consumer.id }});
         }
-    };
-    
-    const onNewProducer = (data: { producerId: string, participantId: string }) => {
-      (consumeRemoteProducerRef.current as any)(data.producerId, data.participantId);
-    };
+    });
 
-    socket.on(SOCKET_EVENTS.CONNECT, onConnect);
-    socket.on(SOCKET_EVENTS.DISCONNECT, onDisconnect);
-    socket.on(SOCKET_EVENTS.ROOM_JOINED, onRoomJoined);
-    socket.on(SOCKET_EVENTS.NEW_PARTICIPANT, (d) => dispatch({ type: 'NEW_PARTICIPANT', payload: d }));
-    socket.on(SOCKET_EVENTS.PARTICIPANT_LEFT, (d) => dispatch({ type: 'PARTICIPANT_LEFT', payload: d }));
-    socket.on(SOCKET_EVENTS.NEW_PRODUCER, onNewProducer);
-    socket.on("error", (err) => handleError(err.message || "An error occurred"));
+    socket.on("hls-started", ({ hlsUrl }) => { setIsHlsEnabled(true); setHlsUrl(hlsUrl); });
+    socket.on("hls-stopped", () => { setIsHlsEnabled(false); setHlsUrl(null); });
+    socket.on("disconnect", () => { setIsConnected(false); handleError("Disconnected from server."); });
 
-    return () => {
-      if (isCleaningUpRef.current) return;
-      isCleaningUpRef.current = true;
-      cleanup();
-    };
-  }, [roomId, socketUrl, cleanup, handleError]);
+    return () => cleanup();
+  }, [roomId, name, role, socketUrl, iceServers, cleanup, handleError, state.consumers]);
+  
+  useEffect(() => {
+    const newRemoteStreams = new Map<string, RemoteStream>();
+    for(const consumer of state.consumers.values()){
+        const { participantId } = consumer.appData;
+        if(!participantId || typeof participantId !== 'string') continue;
+
+        const stream = newRemoteStreams.get(participantId) || {};
+        const trackKey = consumer.kind === "video" ? "videoTrack" : "audioTrack";
+        newRemoteStreams.set(participantId, { ...stream, [trackKey]: consumer.track });
+    }
+    setRemoteStreams(newRemoteStreams);
+  }, [state.consumers]);
 
   const startStreaming = useCallback(async () => {
-    // ✅ FIX: Check if this user has already produced media, not if the room is globally live.
-    if (state.producers.size > 0 || !deviceRef.current) {
-        console.warn("Start streaming called but conditions not met.", { hasProducers: state.producers.size > 0, device: !!deviceRef.current });
-        return;
-    };
-
+    if (state.producers.size > 0) return;
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        localStreamRef.current = stream;
-        
-        if (localVideoRef.current) {
-            localVideoRef.current.srcObject = stream;
-            localVideoRef.current.play().catch((err) => console.error("Local video play failed:", err));
-        } else {
-            console.error("FATAL: localVideoRef was not available when startStreaming was called.");
-        }
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      localStreamRef.current = stream;
+      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
 
-        sendTransportRef.current = await (createTransportRef.current as any)("send");
-        if (!sendTransportRef.current) throw new Error("Send transport could not be created.");
-        
-        const videoTrack = stream.getVideoTracks()[0];
-        const audioTrack = stream.getAudioTracks()[0];
+      const msManager = mediasoupManagerRef.current;
+      if (!msManager) throw new Error("MediasoupManager not initialized");
+      
+      await msManager.createTransport("send");
+      
+      const videoProducer = await msManager.produce(stream.getVideoTracks()[0]);
+      const audioProducer = await msManager.produce(stream.getAudioTracks()[0]);
 
-        if (videoTrack) {
-            const producer = await sendTransportRef.current.produce({ track: videoTrack, appData: { kind: "video" } });
-            dispatch({ type: "ADD_PRODUCER", payload: { producer } });
-        }
-        if (audioTrack) {
-            const producer = await sendTransportRef.current.produce({ track: audioTrack, appData: { kind: "audio" } });
-            dispatch({ type: "ADD_PRODUCER", payload: { producer } });
-        }
-        
-        setIsStreaming(true);
+      if (videoProducer) dispatch({ type: "ADD_PRODUCER", payload: { producer: videoProducer } });
+      if (audioProducer) dispatch({ type: "ADD_PRODUCER", payload: { producer: audioProducer } });
+      
+      if(selfId) {
+        dispatch({ type: "UPDATE_PARTICIPANT", payload: { participantId: selfId, patch: { hasVideo: true, hasAudio: true } } });
+      }
 
-    } catch (err) { 
-        handleError(err as Error, "Error in startStreaming") 
-    }
-  }, [state.producers, handleError]);
-  
+      setIsStreaming(true);
+    } catch (err) { handleError(err as Error, "Start Streaming") }
+  }, [state.producers, handleError, selfId]);
+
   const toggleMedia = useCallback((type: "video" | "audio") => {
     const producer = Array.from(state.producers.values()).find(p => p.kind === type);
     if (!producer) return;
-    if (producer.paused) {
-      producer.resume();
-    } else {
-      producer.pause();
-    }
-    setMediaDeviceStatus(prev => ({ ...prev, [type]: !producer.paused }));
-  }, [state.producers]);
+    
+    if (producer.paused) producer.resume();
+    else producer.pause();
 
+    const isEnabled = !producer.paused;
+    setMediaDeviceStatus(prev => ({ ...prev, [type]: isEnabled }));
+    if(selfId) {
+        const patch = type === 'video' ? { hasVideo: isEnabled } : { hasAudio: isEnabled };
+        dispatch({ type: 'UPDATE_PARTICIPANT', payload: { participantId: selfId, patch } });
+    }
+  }, [state.producers, selfId]);
+  
   const toggleHLS = useCallback(() => {
-    const event = isHlsEnabled ? SOCKET_EVENTS.STOP_HLS : SOCKET_EVENTS.START_HLS;
+    const event = isHlsEnabled ? "stop-hls" : "start-hls";
     socketRef.current?.emit(event, { roomId });
   }, [isHlsEnabled, roomId]);
 
-  const copyToClipboard = useCallback(async (text: string) => {
-    try { await navigator.clipboard.writeText(text) }
-    catch (err) { handleError(err as Error, "Copy to Clipboard") }
-  }, [handleError]);
-
-  // ✅ FIX: This callback now ONLY sets the ref. The useEffect below handles the stream.
   const getRemoteVideoRef = useCallback((participantId: string) => (el: HTMLVideoElement | null) => {
-    if (el) {
-      remoteVideoRefs.current.set(participantId, el);
-    } else {
-      remoteVideoRefs.current.delete(participantId);
-    }
+    if (el) remoteVideoRefs.current.set(participantId, el);
+    else remoteVideoRefs.current.delete(participantId);
   }, []);
 
-  // ✅ FIX: This useEffect is now the single source of truth for managing remote video elements.
-  // It runs whenever remote streams change, preventing the AbortError race condition.
   useEffect(() => {
     remoteVideoRefs.current.forEach((el, participantId) => {
-        if (!el) return;
-        const streamData = remoteStreams.get(participantId);
-        
-        if (!streamData || (!streamData.videoTrack && !streamData.audioTrack)) {
-          if (el.srcObject) el.srcObject = null;
-          return;
-        }
+      if (!el) return;
+      const streamData = remoteStreams.get(participantId);
+      
+      let mediaStream = el.srcObject as MediaStream;
+      if (!streamData) {
+        if(mediaStream) el.srcObject = null;
+        return;
+      }
+      
+      if (!mediaStream) {
+        mediaStream = new MediaStream();
+        el.srcObject = mediaStream;
+      }
 
-        let mediaStream = el.srcObject as MediaStream;
-        if (!mediaStream) {
-            mediaStream = new MediaStream();
-            el.srcObject = mediaStream;
-        }
+      const currentVideoTrack = mediaStream.getVideoTracks()[0];
+      if (streamData.videoTrack && currentVideoTrack?.id !== streamData.videoTrack.id) {
+          if(currentVideoTrack) mediaStream.removeTrack(currentVideoTrack);
+          mediaStream.addTrack(streamData.videoTrack);
+      }
+      
+      const currentAudioTrack = mediaStream.getAudioTracks()[0];
+      if (streamData.audioTrack && currentAudioTrack?.id !== streamData.audioTrack.id) {
+          if(currentAudioTrack) mediaStream.removeTrack(currentAudioTrack);
+          mediaStream.addTrack(streamData.audioTrack);
+      }
 
-        const hasVideo = mediaStream.getVideoTracks().length > 0;
-        const hasAudio = mediaStream.getAudioTracks().length > 0;
-
-        if (streamData.videoTrack && !hasVideo) {
-            mediaStream.addTrack(streamData.videoTrack);
-        }
-        if (streamData.audioTrack && !hasAudio) {
-            mediaStream.addTrack(streamData.audioTrack);
-        }
-
-        el.muted = true;
-        el.playsInline = true;
-        el.play().catch((e) => console.warn(`Autoplay failed for ${participantId}:`, e));
+      el.play().catch(e => console.warn(`Autoplay failed for ${participantId}:`, e));
     });
-  }, [remoteStreams]);
-
-  const hasRemoteMedia = useMemo(() => {
-    for (const stream of remoteStreams.values()) {
-        if (stream.videoTrack || stream.audioTrack) return true;
-    }
-    return false;
   }, [remoteStreams]);
 
   return { 
     isConnected, 
     isStreaming, 
-    hasRemoteMedia, 
     error, 
     participants: state.participants, 
     selfId, 
@@ -442,7 +234,6 @@ const socketUrl = useMemo(() => {
       leaveRoom: cleanup, 
       toggleMedia, 
       toggleHLS, 
-      copyToClipboard 
     } 
   };
 };

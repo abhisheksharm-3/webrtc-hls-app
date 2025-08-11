@@ -1,33 +1,162 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+"use client";
+
+import { useRef, useEffect, useCallback, useReducer } from 'react';
 import Hls, { Events as HlsEvents, ErrorTypes, ErrorData } from 'hls.js';
-import {StreamInfoType} from '@relay-app/shared'
+import { StreamInfoType } from '@relay-app/shared';
+
+// --- State Management with useReducer ---
+
+type PlayerState = {
+  isPlaying: boolean;
+  isMuted: boolean;
+  isLoading: boolean;
+  error: string | null;
+  streamInfo: StreamInfoType | null;
+};
+
+type PlayerAction =
+  | { type: 'ATTEMPT_PLAY' }
+  | { type: 'PLAYBACK_SUCCESS' }
+  | { type: 'PLAYBACK_FAILED' }
+  | { type: 'SET_MUTED'; payload: boolean }
+  | { type: 'SET_STREAM_INFO'; payload: StreamInfoType }
+  | { type: 'ERROR'; payload: string }
+  | { type: 'RESET' };
+
+const initialState: PlayerState = {
+  isPlaying: false,
+  isMuted: false,
+  isLoading: true,
+  error: null,
+  streamInfo: null,
+};
+
+const playerReducer = (state: PlayerState, action: PlayerAction): PlayerState => {
+  switch (action.type) {
+    case 'ATTEMPT_PLAY':
+      return { ...state, isLoading: true, error: null };
+    case 'PLAYBACK_SUCCESS':
+      return { ...state, isLoading: false, isPlaying: true, error: null };
+    case 'PLAYBACK_FAILED':
+      return { ...state, isLoading: false, isPlaying: false };
+    case 'SET_MUTED':
+      return { ...state, isMuted: action.payload };
+    case 'SET_STREAM_INFO':
+      return { ...state, streamInfo: action.payload };
+    case 'ERROR':
+      return { ...state, isLoading: false, isPlaying: false, error: action.payload };
+    case 'RESET':
+      return { ...initialState, isMuted: state.isMuted }; // Persist mute state on reset
+    default:
+      return state;
+  }
+};
+
 
 /**
- * A custom React hook to manage an HLS video player.
- * It handles both Hls.js for standard browsers and native HLS for Safari.
- *
+ * A custom React hook to manage an HLS video player using a reducer for robust state management.
  * @param url The HLS playlist URL (.m3u8) to play.
  * @returns An object containing the video ref, player state, and control actions.
  */
 export const useHlsPlayer = (url: string | null) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  // Use useRef for the Hls.js instance to prevent re-renders on change.
   const hlsInstanceRef = useRef<Hls | null>(null);
+  const [state, dispatch] = useReducer(playerReducer, initialState);
 
-  // --- Player State ---
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [streamInfo, setStreamInfo] = useState<StreamInfoType | null>(null);
+  /**
+   * Sets up an Hls.js instance for browsers that support it.
+   */
+  const setupHlsJsPlayer = useCallback((video: HTMLVideoElement, streamUrl: string) => {
+    const hls = new Hls({ lowLatencyMode: true, enableWorker: true });
+    hlsInstanceRef.current = hls;
+
+    hls.on(HlsEvents.MANIFEST_PARSED, (_, data) => {
+      const level = data.levels?.[0];
+      if (level) {
+        dispatch({
+          type: 'SET_STREAM_INFO',
+          payload: {
+            resolution: { width: level.width, height: level.height },
+            bitrate: level.bitrate,
+          },
+        });
+      }
+      video.play().then(() => dispatch({ type: 'PLAYBACK_SUCCESS' })).catch(() => dispatch({ type: 'PLAYBACK_FAILED' }));
+    });
+
+    hls.on(HlsEvents.ERROR, (_, data: ErrorData) => {
+      if (data.fatal) {
+        let errorMessage = 'An unknown stream error occurred.';
+        switch (data.type) {
+          case ErrorTypes.NETWORK_ERROR:
+            errorMessage = 'Network error: The stream may be offline or starting up.';
+            break;
+          case ErrorTypes.MEDIA_ERROR:
+            errorMessage = 'Media error: There is a problem with the stream\'s format.';
+            break;
+        }
+        dispatch({ type: 'ERROR', payload: errorMessage });
+      }
+    });
+
+    hls.loadSource(streamUrl);
+    hls.attachMedia(video);
+  }, []);
+
+  /**
+   * Sets up the native video player for browsers like Safari.
+   */
+  const setupNativePlayer = useCallback((video: HTMLVideoElement, streamUrl: string) => {
+    video.src = streamUrl;
+    video.play().then(() => dispatch({ type: 'PLAYBACK_SUCCESS' })).catch(() => dispatch({ type: 'PLAYBACK_FAILED' }));
+  }, []);
+
+  // --- Main Effect for Initializing the Player ---
+  useEffect(() => {
+    if (!url || !videoRef.current) {
+        if (!url) dispatch({ type: 'ERROR', payload: 'No stream URL provided.' });
+        return;
+    }
+
+    const video = videoRef.current;
+    dispatch({ type: 'ATTEMPT_PLAY' });
+
+    // Destroy any previous instance
+    hlsInstanceRef.current?.destroy();
+
+    if (Hls.isSupported()) {
+        setupHlsJsPlayer(video, url);
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        setupNativePlayer(video, url);
+    } else {
+        dispatch({ type: 'ERROR', payload: 'HLS playback is not supported in this browser.' });
+    }
+
+    // --- State Sync Event Listeners ---
+    const handlePlay = () => dispatch({ type: 'PLAYBACK_SUCCESS' });
+    const handlePause = () => dispatch({ type: 'PLAYBACK_FAILED' });
+    const handleVolumeChange = () => dispatch({ type: 'SET_MUTED', payload: video.muted });
+
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+    video.addEventListener('volumechange', handleVolumeChange);
+
+    // Cleanup function
+    return () => {
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause',handlePause);
+      video.removeEventListener('volumechange', handleVolumeChange);
+      hlsInstanceRef.current?.destroy();
+      dispatch({ type: 'RESET' });
+    };
+  }, [url, setupHlsJsPlayer, setupNativePlayer]);
 
   // --- Player Actions ---
-
   const togglePlayPause = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
-      video.play().catch(() => setError("Playback was prevented by the browser."));
+      video.play().catch(() => dispatch({ type: 'ERROR', payload: 'Playback was prevented by the browser.' }));
     } else {
       video.pause();
     }
@@ -38,108 +167,16 @@ export const useHlsPlayer = (url: string | null) => {
     if (!video) return;
     video.muted = !video.muted;
   }, []);
-
+  
   const goFullscreen = useCallback(() => {
     videoRef.current?.requestFullscreen().catch(err => {
       console.error("Error attempting to enable full-screen mode:", err);
     });
   }, []);
 
-  // --- Main Effect for Initializing the Player ---
-
-  useEffect(() => {
-    if (!url || !videoRef.current) {
-        setIsLoading(false);
-        if(!url) setError("No stream URL provided.");
-        return;
-    }
-
-    const video = videoRef.current;
-    setIsLoading(true);
-    setError(null);
-
-    // Destroy any previous HLS instance.
-    hlsInstanceRef.current?.destroy();
-
-    const tryPlay = async () => {
-      try {
-        await new Promise(res => setTimeout(res, 300));
-        await video.play();
-        setIsPlaying(true);
-      } catch {
-        setIsPlaying(false);
-      }
-    };
-
-    if (Hls.isSupported()) {
-      const hls = new Hls({ lowLatencyMode: true, enableWorker: true });
-      hlsInstanceRef.current = hls;
-
-      hls.loadSource(url);
-      hls.attachMedia(video);
-
-      hls.on(HlsEvents.MANIFEST_PARSED, async (_, data) => {
-        setIsLoading(false);
-        const level = data.levels?.[0];
-        if (level) {
-          setStreamInfo({
-            resolution: { width: level.width, height: level.height },
-            bitrate: level.bitrate,
-          });
-        }
-        await tryPlay();
-      });
-
-      hls.on(HlsEvents.ERROR, (_, data: ErrorData) => {
-        if (data.fatal) {
-          let errorMessage = 'An unknown error occurred.';
-          switch (data.type) {
-            case ErrorTypes.NETWORK_ERROR:
-              errorMessage = 'Network error: The stream may be offline or starting up.';
-              break;
-            case ErrorTypes.MEDIA_ERROR:
-              errorMessage = 'Media error: There is a problem with the stream\'s format.';
-              break;
-            default:
-              errorMessage = 'Stream is not available.';
-          }
-          setError(errorMessage);
-          setIsLoading(false);
-        }
-      });
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native HLS support (e.g., Safari)
-      video.src = url;
-      tryPlay();
-    } else {
-        setError('HLS playback is not supported in this browser.');
-    }
-
-    // --- State Sync Event Listeners ---
-    const handlePlay = () => setIsPlaying(true);
-    const handlePause = () => setIsPlaying(false);
-    const handleVolumeChange = () => setIsMuted(video.muted);
-
-    video.addEventListener('play', handlePlay);
-    video.addEventListener('pause', handlePause);
-    video.addEventListener('volumechange', handleVolumeChange);
-
-    // Cleanup function
-    return () => {
-      video.removeEventListener('play', handlePlay);
-      video.removeEventListener('pause', handlePause);
-      video.removeEventListener('volumechange', handleVolumeChange);
-      hlsInstanceRef.current?.destroy();
-    };
-  }, [url]); // This effect runs only when the stream URL changes.
-
   return {
     videoRef,
-    isPlaying,
-    isMuted,
-    isLoading,
-    error,
-    streamInfo,
+    ...state,
     actions: {
       togglePlayPause,
       toggleMute,

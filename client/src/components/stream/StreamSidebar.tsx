@@ -1,201 +1,167 @@
+"use client";
+
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Users, Cast, Settings, Copy, Radio, Eye, CheckCircle } from 'lucide-react';
-import { Participant } from '@/lib/types/stream-types';
+import {
+  Users,
+  Cast,
+  Settings,
+  Copy,
+  CheckCircle,
+  Video,
+  Mic,
+} from 'lucide-react';
 import { StreamSidebarProps } from '@/lib/types/ui-types';
-import { useState } from 'react';
+import { Participant } from '@relay-app/shared';
 
-export function StreamSidebar({ 
-  roomCode, 
-  participants, 
-  selfId, 
-  userRole, 
-  hlsUrl, 
-  onCopyToClipboard 
-}: StreamSidebarProps) {
-  const [copiedItem, setCopiedItem] = useState<string | null>(null);
-  
-  const getParticipantName = (p: Participant) => {
-    if (p.id === selfId) {
-      return `You (${userRole === 'host' ? 'Host' : 'Guest'})`;
-    }
-    if (p.isHost) return "Host";
-    return "Guest";
-  };
+// --- Helper Functions & Child Components ---
 
-  const handleCopy = async (text: string, type: string) => {
-    try {
-      await onCopyToClipboard(text);
-      setCopiedItem(type);
-      setTimeout(() => setCopiedItem(null), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
+/**
+ * @description A reusable component for an information field with a copy button.
+ */
+const CopyableInfoField = ({ label, value }: { label: string; value: string }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(value).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(err => console.error('Failed to copy:', err));
   };
-  
-  const watchUrl = hlsUrl ? `${window.location.origin}/watch` : '';
 
   return (
-    <div className="w-80 border-l bg-background/95 backdrop-blur-sm flex flex-col">
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Participants Card */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Users className="w-5 h-5 text-primary" />
-              Participants ({participants.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {participants.length > 0 ? participants.map((p) => (
-              <div key={p.id} className="flex items-center justify-between p-3 rounded-lg bg-secondary/20">
-                <div className="flex items-center gap-3 min-w-0">
-                  <Avatar className="w-8 h-8">
-                    <AvatarFallback className="text-xs">
-                      {getParticipantName(p).charAt(0)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{getParticipantName(p)}</p>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      {p.hasVideo && <span>📹</span>}
-                      {p.hasAudio && <span>🎤</span>}
-                    </div>
-                  </div>
-                </div>
-                {p.isStreaming && (
-                  <Badge variant="secondary" className="text-xs">
-                    <Radio className="w-3 h-3 mr-1" />
-                    Live
-                  </Badge>
-                )}
-              </div>
-            )) : (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                Waiting for participants...
-              </p>
-            )}
-          </CardContent>
-        </Card>
-        
-        {/* Broadcast Card - Only show for host or when HLS is active */}
-        {(userRole === 'host' || hlsUrl) && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Cast className="w-5 h-5 text-primary" />
-                Broadcast
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {hlsUrl ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="font-medium text-sm">HLS Streaming</Label>
-                      <p className="text-xs text-muted-foreground">Broadcasting to viewers</p>
-                    </div>
-                    <Badge variant="default" className="bg-green-500/10 text-green-400 border-green-500/30">
-                      <Eye className="w-3 h-3 mr-1" />
-                      Active
-                    </Badge>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">
-                      Watch URL for Viewers
-                    </Label>
-                    <div className="flex items-center gap-2">
-                      <code className="text-xs font-mono break-all p-2 bg-secondary/50 rounded-md flex-1">
-                        {watchUrl}
-                      </code>
-                      <Button
-                        onClick={() => handleCopy(watchUrl, 'watch-url')}
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 w-8 p-0"
-                      >
-                        {copiedItem === 'watch-url' ? (
-                          <CheckCircle className="w-3 h-3 text-green-500" />
-                        ) : (
-                          <Copy className="w-3 h-3" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-4">
-                  <p className="text-sm text-muted-foreground">
-                    {userRole === 'host' 
-                      ? "Start streaming to enable HLS broadcast"
-                      : "HLS broadcast not active"
-                    }
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Session Info Card */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Settings className="w-5 h-5 text-primary" />
-              Session Info
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div>
-              <Label className="text-xs text-muted-foreground">Room Code</Label>
-              <div className="flex items-center gap-2 mt-1">
-                <code className="text-sm font-mono p-2 bg-secondary/50 rounded-md flex-1">
-                  {roomCode}
-                </code>
-                <Button
-                  onClick={() => handleCopy(roomCode, 'room-code')}
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 w-8 p-0"
-                >
-                  {copiedItem === 'room-code' ? (
-                    <CheckCircle className="w-3 h-3 text-green-500" />
-                  ) : (
-                    <Copy className="w-3 h-3" />
-                  )}
-                </Button>
-              </div>
-            </div>
-            
-            <div>
-              <Label className="text-xs text-muted-foreground">Your Role</Label>
-              <div className="mt-1">
-                <Badge variant="outline" className="capitalize">
-                  {userRole}
-                </Badge>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Instructions */}
-        <Card>
-          <CardContent className="pt-4">
-            <div className="text-xs text-muted-foreground space-y-2">
-              <p className="font-medium">How it works:</p>
-              <ul className="space-y-1 ml-2">
-                <li>• Host and guest can stream together</li>
-                <li>• Viewers watch via HLS (when enabled)</li>
-                <li>• Share the room code to invite others</li>
-              </ul>
-            </div>
-          </CardContent>
-        </Card>
+    <div>
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <div className="flex items-center gap-2 mt-1">
+        <code className="text-sm font-mono p-2 bg-secondary/50 rounded-md flex-1 truncate">
+          {value}
+        </code>
+        <Button onClick={handleCopy} size="icon" variant="ghost" className="h-8 w-8 flex-shrink-0">
+          <span className="sr-only">Copy {label}</span>
+          {copied ? <CheckCircle className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+        </Button>
       </div>
     </div>
+  );
+};
+
+/**
+ * @description Renders a single participant in the list.
+ */
+const ParticipantItem = ({ p, selfId, userRole }: { p: Participant; selfId?: string; userRole: 'host' | 'guest' | 'viewer' }) => {
+  const getParticipantName = () => {
+    if (p.id === selfId) return `You (${userRole === 'host' ? 'Host' : 'Guest'})`;
+    return p.isHost ? 'Host' : 'Guest';
+  };
+
+  return (
+    <div className="flex items-center justify-between p-2 rounded-lg bg-secondary/50">
+      <div className="flex items-center gap-3 min-w-0">
+        <Avatar className="w-8 h-8">
+          <AvatarFallback className="text-xs bg-primary/20">{getParticipantName().charAt(0)}</AvatarFallback>
+        </Avatar>
+        <p className="text-sm font-medium truncate">{getParticipantName()}</p>
+      </div>
+      <div className="flex items-center gap-1.5 text-muted-foreground">
+        {p.hasVideo && <Video className="h-4 w-4" />}
+        {p.hasAudio && <Mic className="h-4 w-4" />}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * @description Displays the list of all participants in the stream.
+ */
+const ParticipantList = ({ participants, selfId, userRole }: Pick<StreamSidebarProps, 'participants' | 'selfId' | 'userRole'>) => (
+  <Card>
+    <CardHeader className="pb-3">
+      <CardTitle className="text-lg flex items-center gap-2">
+        <Users className="w-5 h-5 text-primary" />
+        Participants ({participants.length})
+      </CardTitle>
+    </CardHeader>
+    <CardContent className="space-y-2">
+      {participants.length > 0 ? (
+        participants.map((p) => <ParticipantItem key={p.id} p={p} selfId={selfId} userRole={userRole} />)
+      ) : (
+        <p className="text-sm text-muted-foreground text-center py-4">Waiting for participants...</p>
+      )}
+    </CardContent>
+  </Card>
+);
+
+/**
+ * @description Displays information and actions related to HLS broadcasting.
+ */
+const BroadcastCard = ({ hlsUrl, userRole }: Pick<StreamSidebarProps, 'hlsUrl' | 'userRole'>) => {
+  if (userRole !== 'host' && !hlsUrl) return null; // Hide card if not host and HLS is off
+
+  const watchUrl = hlsUrl ? `${window.location.origin}/watch/${hlsUrl.split('/').slice(-2)[0]}` : '';
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Cast className="w-5 h-5 text-primary" />
+          Broadcast
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {hlsUrl && watchUrl ? (
+          <CopyableInfoField label="Viewer Watch URL" value={watchUrl} />
+        ) : (
+          <p className="text-sm text-muted-foreground text-center py-2">
+            {userRole === 'host' ? "HLS broadcast is off" : "Broadcast not active"}
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
+/**
+ * @description Displays general session information like room code and user role.
+ */
+const SessionInfoCard = ({ roomCode, userRole }: Pick<StreamSidebarProps, 'roomCode' | 'userRole'>) => (
+  <Card>
+    <CardHeader className="pb-3">
+      <CardTitle className="text-lg flex items-center gap-2">
+        <Settings className="w-5 h-5 text-primary" />
+        Session Info
+      </CardTitle>
+    </CardHeader>
+    <CardContent className="space-y-4">
+      <CopyableInfoField label="Room Code" value={roomCode} />
+      <div>
+        <Label className="text-xs text-muted-foreground">Your Role</Label>
+        <div className="mt-1">
+          <Badge variant="outline" className="capitalize">{userRole}</Badge>
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+);
+
+
+// --- Main Sidebar Component ---
+
+/**
+ * @description The main sidebar for the streaming interface, displaying participants,
+ * broadcast info, and session details.
+ */
+export function StreamSidebar(props: StreamSidebarProps) {
+  return (
+    <aside className="hidden lg:block w-80 border-l bg-background/95 backdrop-blur-sm">
+      <div className="h-full overflow-y-auto p-4 space-y-6">
+        <ParticipantList {...props} />
+        <BroadcastCard {...props} />
+        <SessionInfoCard {...props} />
+      </div>
+    </aside>
   );
 }

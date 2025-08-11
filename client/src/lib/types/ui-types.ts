@@ -1,4 +1,5 @@
-import { MediaDeviceStatus, Participant } from "./stream-types";
+import { Participant } from "@relay-app/shared";
+import { MediaDeviceStatus } from "./stream-types";
 import { UserRole } from "@/store/app-store";
 
 export interface StreamHeaderProps {
@@ -44,7 +45,6 @@ export interface StreamSidebarProps {
   selfId: string | undefined;
   userRole: UserRole;
   hlsUrl: string | null;
-  onCopyToClipboard: (text: string) => Promise<void>;
 }
 
 export interface PlayerControlProps {
@@ -54,3 +54,12 @@ export interface PlayerControlProps {
   onMuteToggle: () => void;
   onFullscreen: () => void;
 }
+export type JoinRoomDialogPropsType = {
+  roomId: string;
+  setRoomId: (id: string) => void;
+  onJoinRoom: () => void;
+  onWatchRoom: () => void;
+  children: React.ReactNode;
+};
+
+export type JoinModeType = 'participate' | 'watch';

@@ -12,7 +12,7 @@ import {
   MapPin,
   Search,
 } from 'lucide-react';
-import { featureHighlights, hyperspeedConfig, quickNavLinks } from '@/lib/not-found-config';
+import { featureHighlights, hyperspeedConfig, quickNavLinks } from '@/lib/config/not-found-config';
 
 // --- Child Components (can be moved to separate files) ---
 
