@@ -1,32 +1,26 @@
 #!/bin/sh
 set -e
 
-echo "🚀 Starting WebRTC-HLS Application..."
+# Defaults
+: "${PORT:=3001}"
+: "${NODE_ENV:=production}"
+: "${HLS_STORAGE_PATH:=/app/server/storage/hls}"
+: "${FFMPEG_PATH:=/usr/bin/ffmpeg}"
 
-# Wait for database to be ready
-echo "⏳ Waiting for database connection..."
-until pg_isready -h $DB_HOST -p $DB_PORT -U $DB_USER 2>/dev/null; do
-  echo "Database not ready, waiting..."
-  sleep 2
-done
+# Ensure storage and logs exist for both potential locations
+mkdir -p /app/server/storage/hls /app/server/logs /app/storage/hls
 
-echo "✅ Database is ready!"
+# Generate Prisma client if schema present
+if [ -d "/app/server/prisma" ]; then
+  (cd /app/server && npx prisma generate || true)
+fi
 
-# Navigate to server directory and setup database
-cd /app/server
+# Start server from its directory so process.cwd() is /app/server
+(cd /app/server && node dist/index.js) &
+SERVER_PID=$!
 
-# Generate Prisma client
-echo "🔧 Generating Prisma client..."
-npx prisma generate
+# Start client (bind to 0.0.0.0)
+(cd /app/client && NODE_ENV=production npm run start -- -H 0.0.0.0 -p 3000) &
+CLIENT_PID=$!
 
-# Run database migrations
-echo "🗄️ Running database migrations..."
-npx prisma db push --accept-data-loss
-
-echo "🎬 Starting applications..."
-
-# Go back to root directory
-cd /app
-
-# Execute the command passed to the container
-exec "$@"
+wait $SERVER_PID $CLIENT_PID

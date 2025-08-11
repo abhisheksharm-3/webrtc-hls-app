@@ -1,10 +1,17 @@
 # Multi-stage build for WebRTC-HLS streaming platform
 
-# Build stage for shared dependencies
+###############################################
+# Build stage for shared package
+###############################################
 FROM node:18-alpine AS shared-builder
 WORKDIR /app/shared
+
+# Install build tools needed by dependencies that compile native modules
+RUN apk add --no-cache python3 make g++
+
 COPY shared/package*.json ./
-RUN npm ci --only=production
+# Install full deps to build TypeScript
+RUN npm ci
 COPY shared/ .
 RUN npm run build
 
@@ -18,11 +25,17 @@ RUN apk add --no-cache python3 make g++
 # Copy shared module first
 COPY --from=shared-builder /app/shared ./shared
 
-# Install server dependencies
+# Install server dependencies (need dev deps to build with TypeScript)
 WORKDIR /app/server
 COPY server/package*.json ./
-RUN npm ci --only=production
+COPY server/prisma ./prisma
+RUN npm ci
 COPY server/ .
+
+# Generate Prisma client after schema is present
+RUN npx prisma generate
+
+# Build server
 RUN npm run build
 
 # Build stage for client
@@ -35,8 +48,20 @@ COPY --from=shared-builder /app/shared ./shared
 # Install client dependencies and build
 WORKDIR /app/client
 COPY client/package*.json ./
-RUN npm ci --only=production
+RUN npm ci
 COPY client/ .
+
+# Allow overriding public runtime settings at build time
+ARG NEXT_PUBLIC_SERVER_URL
+ARG NEXT_PUBLIC_WS_URL
+ARG NEXT_PUBLIC_HLS_BASE_URL
+ARG NEXT_PUBLIC_ICE_SERVERS
+
+ENV NEXT_PUBLIC_SERVER_URL=${NEXT_PUBLIC_SERVER_URL}
+ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
+ENV NEXT_PUBLIC_HLS_BASE_URL=${NEXT_PUBLIC_HLS_BASE_URL}
+ENV NEXT_PUBLIC_ICE_SERVERS=${NEXT_PUBLIC_ICE_SERVERS}
+
 RUN npm run build
 
 # Production stage
@@ -49,7 +74,8 @@ RUN apk add --no-cache \
     g++ \
     ffmpeg \
     postgresql-client \
-    libc6-compat
+    libc6-compat \
+    wget
 
 WORKDIR /app
 
@@ -69,7 +95,7 @@ COPY --from=client-builder /app/client/package*.json ./client/
 COPY --from=client-builder /app/client/next.config.ts ./client/
 COPY --from=client-builder /app/client/node_modules ./client/node_modules
 
-# Copy root package.json for scripts
+# Copy root package.json for reference
 COPY package*.json ./
 
 # Create non-root user
@@ -88,6 +114,7 @@ USER nextjs
 
 # Expose ports
 EXPOSE 3000 3001
+EXPOSE 40000-49999/udp
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
@@ -95,4 +122,3 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 # Start applications
 ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["npm", "start"]
