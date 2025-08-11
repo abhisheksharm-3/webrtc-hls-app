@@ -21,7 +21,7 @@ declare global {
  * @returns A singleton instance of PrismaClient.
  */
 const createPrismaClient = (): PrismaClient => {
-  const logLevels = ['info', 'warn', 'error'];
+  const logLevels: Prisma.LogLevel[] = ['info', 'warn', 'error'];
 
   // Enable detailed query logging only in the development environment
   // for easier debugging without impacting production performance.
