@@ -1,252 +1,430 @@
 /**
  * @file Manages the FFmpeg process for converting Mediasoup streams to HLS.
+ * This refactored version uses best practices for process management, port allocation,
+ * and error handling to ensure production readiness.
  */
-import ffmpeg from 'fluent-ffmpeg';
-import path from 'path';
-import fs from 'fs';
-import { types as mediasoupTypes } from 'mediasoup';
-import { LiveRoom } from '../models/Room';
-import { logger } from '../utils/logger';
-import env from '../config/environment';
-import { ChildProcess } from 'child_process';
 
-// Set FFmpeg path from environment variables if provided.
-if (env.FFMPEG_PATH) {
-  ffmpeg.setFfmpegPath(env.FFMPEG_PATH);
-}
+import { spawn, ChildProcess } from "child_process";
+import fs from "fs";
+import os from "os";
+import path from "path";
+import portfinder from "portfinder";
+import { types as mediasoupTypes } from "mediasoup";
+import { LiveRoom } from "../models/Room";
+import { logger } from "../utils/logger";
+import env from "../config/environment";
 
+// --- Configuration and Constants ---
+
+const FFMPEG_PATH = env.FFMPEG_PATH || "ffmpeg";
 const HLS_STORAGE_PATH = env.HLS_STORAGE_PATH;
 
-// Interface for HLS data stored in room
+// --- Interfaces and Types ---
+
+/**
+ * @interface HlsPorts
+ * @description Defines the set of dynamically allocated UDP ports for RTP and RTCP.
+ */
+interface HlsPorts {
+  videoRtpPort: number;
+  videoRtcpPort: number;
+  audioRtpPort: number;
+  audioRtcpPort: number;
+}
+
+/**
+ * @interface HlsData
+ * @description Represents the Mediasoup and filesystem resources associated with an HLS stream.
+ */
 interface HlsData {
   transports: mediasoupTypes.PlainTransport[];
   consumers: mediasoupTypes.Consumer[];
   sdpPath: string;
 }
 
-// Interface to track transport-consumer pairs
+/**
+ * @interface TransportConsumerPair
+ * @description A helper type to associate a Mediasoup consumer with its transport.
+ */
 interface TransportConsumerPair {
   transport: mediasoupTypes.PlainTransport;
   consumer: mediasoupTypes.Consumer;
 }
 
+// --- Public API ---
+
 /**
  * Starts the HLS recording process for a given room.
- * This function creates Mediasoup PlainTransports, generates an SDP file describing
- * the media streams, and spawns an FFmpeg process to create the HLS broadcast.
- *
- * @param room - The LiveRoom instance to be recorded.
- * @returns A promise that resolves with the public URL of the HLS playlist.
+ * This involves selecting producers, creating Mediasoup resources, generating an SDP file,
+ * and spawning an FFmpeg process to create the HLS stream.
+ * @param {LiveRoom} room - The room instance to record.
+ * @returns {Promise<{ playlistUrl: string }>} A promise that resolves with the relative URL to the HLS playlist.
+ * @throws Will throw an error if setup fails at any stage.
  */
-export async function startRecording(room: LiveRoom): Promise<{ playlistUrl: string }> {
-  // --- 1. Select producers to include in the HLS stream ---
-  // We support up to 2 video and up to 2 audio producers and composite them.
-  const allProducers = Array.from(room.participants.values())
-    .flatMap(p => Array.from((p as any)['producers'].values() as mediasoupTypes.Producer[]))
-    .filter(p => !p.closed);
-
-  const videoProducers = allProducers.filter(p => p.kind === 'video').slice(0, 2);
-  const audioProducers = allProducers.filter(p => p.kind === 'audio').slice(0, 2);
-
-  if (videoProducers.length === 0) {
-    throw new Error(`No video producers available in room ${room.id}`);
-  }
-  if (audioProducers.length === 0) {
-    throw new Error(`No audio producers available in room ${room.id}`);
+export async function startRecording(
+  room: LiveRoom,
+): Promise<{ playlistUrl: string }> {
+  if (room.hlsProcess) {
+    throw new Error(`HLS recording is already in progress for room ${room.id}`);
   }
 
-  // --- 2. Create Mediasoup PlainTransports and Consumers ---
-  // Order producers so ffmpeg stream indices are predictable: all videos first, then audios
-  const orderedProducers: mediasoupTypes.Producer[] = [...videoProducers, ...audioProducers];
-  const { transports, consumers, pairs } = await createHlsTransportsAndConsumers(room.router, orderedProducers);
-  
-  // --- 3. Generate an SDP file for FFmpeg ---
-  const sdpString = generateSdp(pairs);
-  const sdpPath = path.join(HLS_STORAGE_PATH, `${room.id}.sdp`);
-  await fs.promises.writeFile(sdpPath, sdpString);
+  logger.info(`[HLS] Starting HLS recording for room ${room.id}...`);
 
-  // --- 4. Configure HLS output paths ---
-  const hlsOutputPath = path.join(HLS_STORAGE_PATH, room.id);
-  await fs.promises.mkdir(hlsOutputPath, { recursive: true });
-  const playlistPath = path.join(hlsOutputPath, 'playlist.m3u8');
-  
-  // --- 5. Spawn the FFmpeg process ---
-  const command = ffmpeg(sdpPath)
-    .inputOptions(['-protocol_whitelist', 'file,udp,rtp'])
-    .videoCodec('libx264')
-    .audioCodec('aac');
+  try {
+    // 1. Ensure HLS output directory exists and is writable
+    const absoluteHlsPath = await ensureHlsDirectory();
+    const hlsOutputDir = path.join(absoluteHlsPath, room.id);
+    await fs.promises.mkdir(hlsOutputDir, { recursive: true });
 
-  // Build complex filter: scale and hstack videos, mix audios
-  const hasTwoVideos = videoProducers.length >= 2;
-  const hasTwoAudios = audioProducers.length >= 2;
+    // 2. Select the first available audio and video producers
+    const { videoProducer, audioProducer } = selectProducers(room);
 
-  const complexFilters: any[] = [];
-  const videoOutLabel = 'vout';
-  const audioOutLabel = 'aout';
+    // 3. Find available network ports for RTP/RTCP
+    const hlsPorts = await findAvailablePorts();
+    logger.info(`[HLS] Found available ports for room ${room.id}: ${JSON.stringify(hlsPorts)}`);
 
-  if (hasTwoVideos) {
-    // 0:v:0, 0:v:1 from SDP
-    complexFilters.push('[0:v:0]scale=960:540[v0]');
-    complexFilters.push('[0:v:1]scale=960:540[v1]');
-    complexFilters.push('[v0][v1]hstack=inputs=2[' + videoOutLabel + ']');
-  } else {
-    // Single video, still scale to 1280x720
-    complexFilters.push('[0:v:0]scale=1280:720[' + videoOutLabel + ']');
+    // 4. Create Mediasoup transports and consumers
+    const { transports, consumers, pairs } =
+      await createRtpTransportsAndConsumers(
+        room.router,
+        [videoProducer, audioProducer],
+        hlsPorts,
+      );
+    logger.info(`[HLS] Created ${transports.length} transports and ${consumers.length} consumers.`);
+
+    // 5. Generate and write the SDP file for FFmpeg
+    const sdpPath = path.join(hlsOutputDir, "stream.sdp");
+    // FIX: Pass the hlsPorts object to generateSdp
+    const sdpString = generateSdp(pairs, hlsPorts);
+    await fs.promises.writeFile(sdpPath, sdpString);
+    logger.info(`[HLS] Generated SDP file at ${sdpPath}`);
+
+    // 6. Resume consumers to start data flow
+    await Promise.all(consumers.map((c) => c.resume()));
+    logger.info("[HLS] Resumed all consumers.");
+
+    // 7. Spawn the FFmpeg process
+    const ffmpegProcess = runFfmpeg(sdpPath, hlsOutputDir, room.id);
+    room.hlsProcess = ffmpegProcess;
+    logger.info(`[HLS] Spawned FFmpeg process with PID ${ffmpegProcess.pid} for room ${room.id}.`);
+
+    // 8. Store resource references for cleanup
+    room.appData.hls = { transports, consumers, sdpPath };
+
+    const playlistUrl = `/hls/${room.id}/playlist.m3u8`;
+    return { playlistUrl };
+  } catch (error) {
+    // FIX: Safely handle 'unknown' error type
+    logger.error(`[HLS] Failed to start HLS recording for room ${room.id}:`, error);
+    // Clean up any resources that might have been created before the error
+    await stopRecording(room).catch((cleanupError) =>
+      logger.error(`[HLS] Critical: Failed to cleanup resources after a startup error:`, cleanupError),
+    );
+    throw error;
   }
-
-  if (hasTwoAudios) {
-    complexFilters.push('[0:a:0][0:a:1]amix=inputs=2:duration=longest:dropout_transition=3[' + audioOutLabel + ']');
-  } else {
-    // Pass through single audio
-    // Map later directly from 0:a:0
-  }
-
-  if (complexFilters.length > 0) {
-    command.complexFilter(complexFilters);
-  }
-
-  // Output mapping and HLS settings
-  const outputOptions = [
-    '-map', '[' + videoOutLabel + ']',
-    ...(hasTwoAudios ? ['-map', '[' + audioOutLabel + ']'] : ['-map', '0:a:0']),
-    '-preset', 'ultrafast',
-    '-tune', 'zerolatency',
-    '-hls_time', '4',
-    '-hls_list_size', '5',
-    '-hls_flags', 'delete_segments',
-  ];
-
-  command.outputOptions(outputOptions).output(playlistPath);
-
-  command
-    .on('start', (cmd) => logger.info(`HLS transcoding started for room ${room.id}: ${cmd}`))
-    .on('error', (err) => logger.error(`HLS transcoding error for room ${room.id}:`, err))
-    .on('end', () => logger.info(`HLS transcoding ended for room ${room.id}`));
-
-  // When ffmpeg actually starts, capture the underlying child process
-  command.on('start', () => {
-    const proc: ChildProcess | undefined = (command as any).ffmpegProc;
-    if (proc) {
-      room.hlsProcess = proc;
-    }
-  });
-
-  command.run();
-  
-  // --- 6. Store references for cleanup ---
-
-  // Store HLS data for cleanup in room.appData.hls
-  room.appData.hls = {
-    transports,
-    consumers,
-    sdpPath,
-  } as HlsData;
-
-  const playlistUrl = `/hls/${room.id}/playlist.m3u8`;
-  return { playlistUrl };
 }
 
 /**
  * Stops the HLS recording for a given room.
- * It kills the FFmpeg process, closes the Mediasoup transports, and cleans up files.
- * @param room - The LiveRoom instance to stop recording.
+ * This function gracefully terminates the FFmpeg process and waits for it to exit
+ * before cleaning up all associated Mediasoup resources and filesystem artifacts.
+ * This prevents race conditions where a new stream is started before the old one's
+ * network ports have been released.
+ * @param {LiveRoom} room - The room instance to stop recording for.
+ * @returns {Promise<void>} A promise that resolves when cleanup is fully complete.
  */
-export async function stopRecording(room: LiveRoom): Promise<void> {
-  if (room.hlsProcess) {
-    logger.info(`Stopping HLS stream for room ${room.id}`);
-    room.hlsProcess.kill('SIGKILL');
-    room.hlsProcess = undefined;
-  }
+export function stopRecording(room: LiveRoom): Promise<void> {
+  // Return a promise that resolves only when all cleanup is done.
+  return new Promise((resolve) => {
+    logger.info(`[HLS] Stopping HLS recording for room ${room.id}...`);
+    const hlsData = room.appData.hls as HlsData | undefined;
+    const hlsProcess = room.hlsProcess;
 
-  // Close the associated Mediasoup transports and consumers
-  const hlsData = room.appData.hls as HlsData | undefined;
-  if (hlsData) {
-    // Close consumers first
-    hlsData.consumers?.forEach((consumer: mediasoupTypes.Consumer) => {
-      if (!consumer.closed) {
-        consumer.close();
-      }
-    });
-    
-    // Then close transports
-    hlsData.transports?.forEach((transport: mediasoupTypes.Transport) => {
-      if (!transport.closed) {
-        transport.close();
-      }
-    });
+    /**
+     * A self-contained cleanup function to close resources and delete files.
+     * This avoids code duplication.
+     */
+    const cleanupResources = async () => {
+      // 1. Clean up Mediasoup resources (consumers and transports)
+      if (hlsData) {
+        logger.info("[HLS] Closing Mediasoup consumers and transports...");
+        for (const resource of [...hlsData.consumers, ...hlsData.transports]) {
+          try {
+            if (!resource.closed) resource.close();
+          } catch (e) {
+            logger.warn(`[HLS] Failed to close resource ${resource.id}. It may have already been closed.`);
+          }
+        }
 
-    // Clean up the SDP file
-    if (hlsData.sdpPath) {
-      await fs.promises.unlink(hlsData.sdpPath).catch(err => {
-        logger.warn(`Failed to delete SDP file: ${err.message}`);
+        // 2. Delete the SDP file
+        try {
+          await fs.promises.unlink(hlsData.sdpPath);
+        } catch (e) {
+          // Ignore "file not found" errors, as it might have already been deleted.
+          if (e && typeof e === 'object' && 'code' in e && e.code !== 'ENOENT') {
+            logger.warn(`[HLS] Failed to delete SDP file at ${hlsData.sdpPath}.`);
+          }
+        }
+        room.appData.hls = undefined;
+      }
+
+      // 3. (Optional) Clean up the HLS output directory
+      const hlsOutputDir = path.join(path.resolve(process.cwd(), HLS_STORAGE_PATH), room.id);
+      try {
+        logger.info(`[HLS] Deleting HLS output directory: ${hlsOutputDir}`);
+        await fs.promises.rm(hlsOutputDir, { recursive: true, force: true });
+      } catch (err) {
+        logger.warn(`[HLS] Failed to delete HLS output directory: ${err instanceof Error ? err.message : String(err)}`);
+      }
+
+      logger.info(`[HLS] Successfully stopped recording for room ${room.id}.`);
+      resolve(); // All done, resolve the main promise.
+    };
+
+    // --- Main Logic ---
+
+    // If a process exists and hasn't been killed yet...
+    if (hlsProcess && !hlsProcess.killed) {
+      // Set a listener to perform cleanup *after* the process confirms it has closed.
+      hlsProcess.on('close', () => {
+        logger.info(`[HLS] FFmpeg process ${hlsProcess.pid} has exited.`);
+        room.hlsProcess = undefined;
+        cleanupResources();
       });
-    }
-    
-    // Clear the HLS data
-    room.appData.hls = undefined as any;
-  }
 
-  // Clean up HLS segment files
-  const hlsOutputPath = path.join(HLS_STORAGE_PATH, room.id);
-  await fs.promises.rm(hlsOutputPath, { recursive: true, force: true }).catch(err => {
-    logger.warn(`Failed to delete HLS output directory: ${err.message}`);
+      // Now, send the signal to terminate the process.
+      logger.info(`[HLS] Sending SIGTERM to FFmpeg process ${hlsProcess.pid}.`);
+      hlsProcess.kill('SIGTERM');
+
+    } else {
+      // If there's no process to kill, just run the cleanup logic immediately.
+      cleanupResources();
+    }
   });
 }
 
 
 // --- Private Helper Functions ---
 
-async function createHlsTransportsAndConsumers(router: mediasoupTypes.Router, producers: mediasoupTypes.Producer[]) {
-    const transports: mediasoupTypes.PlainTransport[] = [];
-    const consumers: mediasoupTypes.Consumer[] = [];
-    const pairs: TransportConsumerPair[] = [];
+/**
+ * Ensures the main HLS storage directory exists and is writable.
+ * @private
+ * @returns {Promise<string>} The absolute path to the HLS storage directory.
+ */
+async function ensureHlsDirectory(): Promise<string> {
+  try {
+    const absoluteHlsPath = path.resolve(process.cwd(), HLS_STORAGE_PATH);
+    await fs.promises.mkdir(absoluteHlsPath, { recursive: true });
 
-    for (const producer of producers) {
-        const transport = await router.createPlainTransport({
-            listenIp: { ip: '127.0.0.1' }, // Listen locally for FFmpeg
-            rtcpMux: false,
-            comedia: true
-        });
-        transports.push(transport);
+    // Verify write permissions by creating and deleting a temporary file.
+    const testFile = path.join(absoluteHlsPath, ".writable");
+    await fs.promises.writeFile(testFile, "test");
+    await fs.promises.unlink(testFile);
 
-        const consumer = await transport.consume({
-            producerId: producer.id,
-            rtpCapabilities: router.rtpCapabilities,
-            paused: false,
-        });
-        consumers.push(consumer);
-        
-        // Store the transport-consumer pair for SDP generation
-        pairs.push({ transport, consumer });
-    }
-    return { transports, consumers, pairs };
+    return absoluteHlsPath;
+  } catch (error) {
+    // FIX: Safely handle 'unknown' error type
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error("HLS storage directory setup failed. Check path and permissions.", error);
+    throw new Error(`HLS directory setup failed: ${message}`);
+  }
 }
 
-function generateSdp(pairs: TransportConsumerPair[]): string {
-    const sdpParts = [
-        'v=0',
-        'o=- 0 0 IN IP4 127.0.0.1',
-        's=FFmpeg',
-        'c=IN IP4 127.0.0.1',
-        't=0 0'
-    ];
+/**
+ * Selects the first active video and audio producers from the room.
+ * @private
+ * @param {LiveRoom} room - The room to select producers from.
+ * @returns {{ videoProducer: mediasoupTypes.Producer; audioProducer: mediasoupTypes.Producer }} The selected producers.
+ * @throws If either a video or audio producer is not found.
+ */
+function selectProducers(room: LiveRoom): {
+  videoProducer: mediasoupTypes.Producer;
+  audioProducer: mediasoupTypes.Producer;
+} {
+  const allProducers = Array.from(room.participants.values()).flatMap((p) =>
+    Array.from((p as any)["producers"].values() as mediasoupTypes.Producer[]),
+  ).filter((p) => !p.closed);
 
-    for (const { transport, consumer } of pairs) {
-        // Access the transport's tuple directly since we have the transport reference
-        const localPort = transport.tuple?.localPort;
-        
-        if (!localPort) {
-            logger.warn(`No local port found for consumer ${consumer.id}`);
-            continue;
-        }
-        
-        const codec = consumer.rtpParameters.codecs[0];
-        const mediaPart = [
-            `m=${consumer.kind} ${localPort} RTP/AVP ${codec.payloadType}`,
-            `a=rtpmap:${codec.payloadType} ${codec.mimeType.split('/')[1]}/${codec.clockRate}` + (codec.channels ? `/${codec.channels}` : '')
-        ];
-        sdpParts.push(...mediaPart);
+  const videoProducer = allProducers.find((p) => p.kind === "video");
+  const audioProducer = allProducers.find((p) => p.kind === "audio");
+
+  if (!videoProducer || !audioProducer) {
+    throw new Error(`Required producers not found. Video: ${!!videoProducer}, Audio: ${!!audioProducer}`);
+  }
+
+  logger.info(`[HLS] Selected producers: Video=${videoProducer.id}, Audio=${audioProducer.id}`);
+  return { videoProducer, audioProducer };
+}
+
+/**
+ * Finds a set of four available, sequential UDP ports for RTP and RTCP.
+ * @private
+ * @returns {Promise<HlsPorts>} A promise resolving to an object of available ports.
+ */
+async function findAvailablePorts(): Promise<HlsPorts> {
+  // Use a high port range to avoid conflicts with common services.
+  portfinder.setBasePort(40000);
+
+  const findPort = () => portfinder.getPortPromise();
+
+  // Find four distinct ports. portfinder prevents reuse within the same process.
+  const ports = await Promise.all([findPort(), findPort(), findPort(), findPort()]);
+
+  return {
+    videoRtpPort: ports[0],
+    videoRtcpPort: ports[1],
+    audioRtpPort: ports[2],
+    audioRtcpPort: ports[3],
+  };
+}
+
+/**
+ * Creates Mediasoup PlainTransports and Consumers for HLS ingestion.
+ * @private
+ */
+async function createRtpTransportsAndConsumers(
+  router: mediasoupTypes.Router,
+  producers: mediasoupTypes.Producer[],
+  ports: HlsPorts,
+): Promise<{
+  transports: mediasoupTypes.PlainTransport[];
+  consumers: mediasoupTypes.Consumer[];
+  pairs: TransportConsumerPair[];
+}> {
+  const transportOptions = {
+    listenIp: { ip: "127.0.0.1", announcedIp: undefined },
+    rtcpMux: false,
+    comedia: false,
+  };
+
+  const [videoTransport, audioTransport] = await Promise.all([
+    router.createPlainTransport(transportOptions),
+    router.createPlainTransport(transportOptions),
+  ]);
+
+  await Promise.all([
+    videoTransport.connect({ ip: "127.0.0.1", port: ports.videoRtpPort, rtcpPort: ports.videoRtcpPort }),
+    audioTransport.connect({ ip: "127.0.0.1", port: ports.audioRtpPort, rtcpPort: ports.audioRtcpPort }),
+  ]);
+
+  const consumers: mediasoupTypes.Consumer[] = [];
+  const pairs: TransportConsumerPair[] = [];
+
+  for (const producer of producers) {
+    const transport = producer.kind === "video" ? videoTransport : audioTransport;
+    const consumer = await transport.consume({
+      producerId: producer.id,
+      rtpCapabilities: router.rtpCapabilities,
+      paused: true, // Start paused, will be resumed after FFmpeg starts
+    });
+    consumers.push(consumer);
+    pairs.push({ transport, consumer });
+  }
+
+  return { transports: [videoTransport, audioTransport], consumers, pairs };
+}
+
+/**
+ * Generates an SDP (Session Description Protocol) string for FFmpeg.
+ * This file tells FFmpeg where to listen for the audio and video RTP streams.
+ * @private
+ * @param {TransportConsumerPair[]} pairs - The transport-consumer pairs.
+ * @param {HlsPorts} ports - The allocated ports for the HLS stream.
+ * @returns {string} The generated SDP content.
+ */
+// FIX: Add HlsPorts to the function signature
+function generateSdp(pairs: TransportConsumerPair[], ports: HlsPorts): string {
+  const sdpParts = [
+    "v=0",
+    "o=- 0 0 IN IP4 127.0.0.1",
+    "s=Mediasoup-HLS",
+    "c=IN IP4 127.0.0.1",
+    "t=0 0",
+  ];
+
+  // FIX: Iterate and use the correct ports from the 'ports' object
+  for (const { consumer } of pairs) {
+    const { rtpParameters, kind } = consumer;
+    const codec = rtpParameters.codecs[0];
+
+    // Determine the correct ports based on the media kind
+    const rtpPort = kind === 'video' ? ports.videoRtpPort : ports.audioRtpPort;
+    const rtcpPort = kind === 'video' ? ports.videoRtcpPort : ports.audioRtcpPort;
+
+    sdpParts.push(
+      `m=${kind} ${rtpPort} RTP/AVP ${codec.payloadType}`,
+      `a=rtcp:${rtcpPort}`,
+      `a=sendrecv`,
+      `a=rtpmap:${codec.payloadType} ${codec.mimeType.split("/")[1]}/${codec.clockRate}${codec.channels ? `/${codec.channels}` : ""}`,
+    );
+    if (codec.parameters) {
+      for (const [key, value] of Object.entries(codec.parameters)) {
+        sdpParts.push(`a=fmtp:${codec.payloadType} ${key}=${value}`);
+      }
     }
+  }
+  return sdpParts.join("\r\n") + "\r\n";
+}
 
-    return sdpParts.join('\r\n');
+/**
+ * Spawns the FFmpeg process with the correct arguments for HLS conversion.
+ * @private
+ * @param {string} sdpPath - The path to the SDP input file.
+ * @param {string} outputDir - The directory where HLS files will be stored.
+ * @param {string} roomId - The ID of the room, used for logging context.
+ * @returns {ChildProcess} The spawned FFmpeg child process instance.
+ */
+function runFfmpeg(sdpPath: string, outputDir: string, roomId: string): ChildProcess {
+  const playlistPath = path.join(outputDir, "playlist.m3u8");
+  const segmentPath = path.join(outputDir, "segment_%03d.ts");
+
+  const args = [
+    // Instruct FFmpeg to process the SDP file.
+    "-protocol_whitelist", "file,udp,rtp",
+    "-i", sdpPath,
+
+    // Video codec settings
+    "-c:v", "libx264",
+    "-preset", "veryfast", // A good balance of quality and CPU usage
+    "-tune", "zerolatency",
+    "-crf", "23", // Constant Rate Factor (lower is better quality, 18-28 is a sane range)
+    "-pix_fmt", "yuv420p",
+
+    // Audio codec settings
+    "-c:a", "aac",
+    "-b:a", "128k",
+
+    // HLS output settings
+    "-f", "hls",
+    "-hls_time", "2", // 2-second segments
+    "-hls_list_size", "5", // Keep 5 segments in the playlist
+    "-hls_flags", "delete_segments", // Delete old segments
+    "-hls_segment_filename", segmentPath,
+    playlistPath,
+  ];
+
+  const ffmpegProc = spawn(FFMPEG_PATH, args, {
+    // Detached mode is not needed here; we manage the lifecycle directly.
+    // The 'pipe' option for stdio allows us to capture logs.
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  // --- Process Event Handling ---
+  ffmpegProc.on("error", (err) => {
+    logger.error(`[FFmpeg][${roomId}] Failed to start FFmpeg process:`, err);
+  });
+
+  ffmpegProc.on("close", (code, signal) => {
+    logger.info(`[FFmpeg][${roomId}] Process exited with code ${code} and signal ${signal}.`);
+    // If the process exits unexpectedly, you might want to trigger cleanup here.
+  });
+
+  // Pipe FFmpeg's stderr to our logger for real-time diagnostics.
+  ffmpegProc.stderr.on("data", (data) => {
+    const message = data.toString().trim();
+    // FFmpeg logs verbosely; filter for important lines or log everything at debug level.
+    logger.debug(`[FFmpeg][${roomId}] ${message}`);
+  });
+
+  return ffmpegProc;
 }

@@ -77,7 +77,7 @@ export const mediasoupConfig = {
       // `announcedIp` is the public IP address of the server that clients will connect to.
       // This is crucial for environments behind NAT (like Docker or cloud servers).
       // In development, it can often be omitted.
-      announcedIp: NODE_ENV === 'production' ? MEDIASOUP_ANNOUNCED_IP : undefined,
+      announcedIp: MEDIASOUP_ANNOUNCED_IP || undefined,
     }],
     // Prefer UDP for lower latency, but allow TCP as a fallback.
     // Forcing TCP can help with very restrictive firewalls but increases latency.
@@ -96,7 +96,7 @@ export const mediasoupConfig = {
    * @see https://mediasoup.org/documentation/v3/mediasoup/api/#PlainTransportOptions
    */
   plainTransport: {
-    listenIp: { ip: MEDIASOUP_LISTEN_IP },
+    listenIp: { ip: '127.0.0.1' },
     // Enable RTCP for quality monitoring.
     enableRtcp: true,
     // appData can be used to identify the purpose of this transport.
