@@ -32,8 +32,17 @@ export function registerWebRtcHandlers(io: Server, socket: Socket): void {
       const transport = getTransport(transportParams.id);
       if (transport) {
         // IMPORTANT: Tag the transport with its direction.
-        transport.appData.direction = data.direction;
+        // Ensure we create a new appData object to avoid reference sharing issues
+        transport.appData = {
+          ...transport.appData,
+          direction: data.direction,
+          participantId: participant.id
+        };
         participant.addTransport(transport);
+        logger.info(`✅ ${data.direction} transport created for participant ${participant.id} | transportId: ${transport.id}`);
+      } else {
+        logger.error(`❌ Failed to retrieve transport ${transportParams.id} after creation`);
+        throw new Error('Transport creation failed - could not retrieve transport');
       }
       
       callback(transportParams);
@@ -107,31 +116,67 @@ export function registerWebRtcHandlers(io: Server, socket: Socket): void {
   /**
    * Creates a server-side consumer to send a media track to a client.
    */
-  socket.on('consume', async (data: { producerId: string, rtpCapabilities: mediasoupTypes.RtpCapabilities }, callback) => {
-    try {
-        const consumerParticipant = getLiveParticipant(socket.id);
-        if (!consumerParticipant) throw new Error('Consuming participant not found.');
+  /**
+ * Creates a server-side consumer to send a media track to a client.
+ */
+socket.on('consume', async (data: { producerId: string, rtpCapabilities: mediasoupTypes.RtpCapabilities }, callback) => {
+  try {
+    const consumerParticipant = getLiveParticipant(socket.id);
+    if (!consumerParticipant) throw new Error('Consuming participant not found.');
 
-        const producer = getProducer(data.producerId);
-        if (!producer) throw new Error('Producer to be consumed not found.');
-
-        const transport = consumerParticipant.getRecvTransport();
-        if (!transport) throw new Error('No receiving transport found for consumer.');
-
-        const consumer = await createConsumer(transport, producer, data.rtpCapabilities);
-        consumerParticipant.addConsumer(consumer);
-        
-        await resumeConsumer(consumer.id);
-
-        callback({
-            id: consumer.id,
-            producerId: consumer.producerId,
-            kind: consumer.kind,
-            rtpParameters: consumer.rtpParameters,
-        });
-    } catch (error) {
-        logger.error(`Error in 'consume' for socket ${socket.id}:`, error);
-        callback({ error: (error as Error).message });
+    // Viewers should not be consuming via WebRTC
+    if (consumerParticipant.isViewer) {
+      throw new Error('Viewers cannot consume WebRTC streams. Use HLS instead.');
     }
-  });
+
+    const producer = getProducer(data.producerId);
+    if (!producer) throw new Error('Producer to be consumed not found.');
+
+    const transport = consumerParticipant.getRecvTransport();
+    if (!transport) throw new Error('No receiving transport found for consumer.');
+
+    // Check if transport is closed before consuming
+    if (transport.closed) {
+      logger.warn(`Transport ${transport.id} is closed, consumer may not work immediately`);
+    }
+
+    const consumer = await createConsumer(transport, producer, data.rtpCapabilities);
+    consumerParticipant.addConsumer(consumer);
+    
+    // Set up consumer event handlers
+    consumer.on('transportclose', () => {
+      logger.info(`Consumer transport closed: ${consumer.id}`);
+      consumerParticipant.consumers.delete(consumer.id);
+    });
+
+    consumer.on('producerclose', () => {
+      logger.info(`Consumer producer closed: ${consumer.id}`);
+      consumerParticipant.consumers.delete(consumer.id);
+      socket.emit('producer-closed', { producerId: consumer.producerId });
+    });
+
+    // Return consumer parameters immediately - DON'T resume yet
+    callback({
+      id: consumer.id,
+      producerId: consumer.producerId,
+      kind: consumer.kind,
+      rtpParameters: consumer.rtpParameters,
+    });
+
+    // Resume consumer after client has had time to set up
+    // This gives the client transport time to connect if it hasn't already
+    setTimeout(async () => {
+      try {
+        await resumeConsumer(consumer.id);
+        logger.info(`✅ Consumer resumed: ${consumer.id} for producer: ${data.producerId}`);
+      } catch (error) {
+        logger.error(`Failed to resume consumer ${consumer.id}:`, error);
+      }
+    }, 500); // Wait 500ms for client to be ready
+
+  } catch (error) {
+    logger.error(`Error in 'consume' for socket ${socket.id}:`, error);
+    callback({ error: (error as Error).message });
+  }
+});
 }

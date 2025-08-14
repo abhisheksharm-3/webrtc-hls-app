@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { Menu, X, ArrowRight, Zap, Globe, Users, LucideIcon } from "lucide-react";
+import { Menu, X, ArrowRight, Zap, Globe, Users } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { ModeToggle } from "../mode-toggle";
 import { cn } from "@/lib/utils";
+import { NavLinkItem } from "@/lib/types/ui-types";
 
 // --- Constants ---
-const navLinks = [
+
+const navLinks: NavLinkItem[] = [
   {
     href: "#features",
     label: "Features",
@@ -29,11 +31,13 @@ const navLinks = [
   },
 ];
 
+// --- Style Constants for Readability ---
+const mobileNavLinkBaseStyles = "group relative flex items-center gap-4 p-6 rounded-2xl border border-border/20 bg-card/50 backdrop-blur-sm transition-all duration-300 hover:bg-card/80 hover:border-primary/20 hover:shadow-lg";
+const mobileNavLinkAnimationStyles = "transform transition-transform duration-500 ease-out";
+
+
 // --- Sub-components ---
 
-/**
- * Renders the site logo.
- */
 const Logo = () => (
   <Link href="/" className="flex items-center gap-3 group">
     <div className="relative">
@@ -46,37 +50,22 @@ const Logo = () => (
   </Link>
 );
 
-/**
- * Renders the navigation links for the desktop view.
- */
 const DesktopNav = () => (
-  <div className="hidden items-center gap-2 md:flex">
-    <nav className="items-center gap-2 md:flex">
-      {navLinks.map((link) => (
-        <Link
-          key={link.href}
-          href={link.href}
-          className="px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-accent/50 rounded-md"
-        >
-          {link.label}
-        </Link>
-      ))}
-    </nav>
+  <nav className="hidden items-center gap-2 md:flex">
+    {navLinks.map((link) => (
+      <Link
+        key={link.href}
+        href={link.href}
+        className="px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-accent/50 rounded-md"
+      >
+        {link.label}
+      </Link>
+    ))}
     <div className="w-px h-6 bg-border/50 mx-4" />
     <ModeToggle />
-  </div>
+  </nav>
 );
 
-type NavLinkItem = {
-  href: string;
-  label: string;
-  icon: LucideIcon;
-  description: string;
-};
-
-/**
- * Renders a single animated link for the full-page mobile navigation.
- */
 const MobileNavLink = ({
   link,
   index,
@@ -87,41 +76,36 @@ const MobileNavLink = ({
   index: number;
   isOpen: boolean;
   onClick: () => void;
-}) => {
-  const Icon = link.icon;
-  return (
-    <Link
-      href={link.href}
-      className={cn(
-        "group relative flex items-center gap-4 p-6 rounded-2xl border border-border/20 bg-card/50 backdrop-blur-sm transition-all duration-300 hover:bg-card/80 hover:border-primary/20 hover:shadow-lg",
-        "transform transition-transform duration-500 ease-out",
-        isOpen ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"
-      )}
-      style={{
-        transitionDelay: isOpen ? `${index * 100}ms` : "0ms",
-      }}
-      onClick={onClick}
-    >
-      <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-        <Icon className="w-6 h-6 text-primary" />
+}) => (
+  <Link
+    href={link.href}
+    className={cn(
+      mobileNavLinkBaseStyles,
+      mobileNavLinkAnimationStyles,
+      isOpen ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"
+    )}
+    style={{
+      // Stagger the animation of each link
+      transitionDelay: isOpen ? `${index * 100}ms` : "0ms",
+    }}
+    onClick={onClick}
+  >
+    <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+      <link.icon className="w-6 h-6 text-primary" />
+    </div>
+    <div className="flex-1 min-w-0">
+      <div className="font-sans text-xl font-semibold text-foreground group-hover:text-primary transition-colors">
+        {link.label}
       </div>
-      <div className="flex-1 min-w-0">
-        <div className="font-sans text-xl font-semibold text-foreground group-hover:text-primary transition-colors">
-          {link.label}
-        </div>
-        <div className="font-mono text-sm text-muted-foreground mt-1">
-          {link.description}
-        </div>
+      <div className="font-mono text-sm text-muted-foreground mt-1">
+        {link.description}
       </div>
-      <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
-      <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-    </Link>
-  );
-};
+    </div>
+    <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
+    <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+  </Link>
+);
 
-/**
- * Renders the full-page mobile navigation.
- */
 const MobileNav = ({
   isOpen,
   onToggle,
@@ -131,7 +115,6 @@ const MobileNav = ({
   onToggle: () => void;
   onClose: () => void;
 }) => {
-  // Use a CSS class on the body to prevent scrolling when the menu is open.
   useEffect(() => {
     const bodyClass = "no-scroll";
     if (isOpen) {
@@ -158,7 +141,6 @@ const MobileNav = ({
           {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </Button>
       </div>
-
       <div
         className={cn(
           "fixed inset-0 bg-background/95 backdrop-blur-lg md:hidden transition-all duration-500 ease-in-out z-40 h-screen py-24",
@@ -169,18 +151,14 @@ const MobileNav = ({
       >
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgb(255_255_255_0.1)_1px,transparent_0)] [background-size:20px_20px] opacity-20" />
-
         <div className="relative flex flex-col h-full">
           <div className="flex-shrink-0 px-6 pt-24 pb-8 text-center">
-            {/* Reusing the Logo component */}
             <div className="inline-flex">
-               <Logo />
+              <Logo />
             </div>
           </div>
-
           <nav className="flex-1 px-6 space-y-4">
             {navLinks.map((link, index) => (
-              // Using the extracted MobileNavLink component
               <MobileNavLink
                 key={link.href}
                 link={link}
@@ -190,7 +168,6 @@ const MobileNav = ({
               />
             ))}
           </nav>
-
           <div className="flex-shrink-0 p-6 space-y-6">
             <div className="text-center space-y-2">
               <p className="font-mono text-xs text-muted-foreground tracking-wider uppercase">

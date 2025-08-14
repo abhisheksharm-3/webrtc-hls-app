@@ -64,30 +64,30 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({
+const RootLayout = ({
   children,
 }: Readonly<{
   children: React.ReactNode;
-}>) {
-  return (
-    <html lang="en" suppressHydrationWarning>
-      <body
-        className={cn(
-          "min-h-screen bg-background font-sans text-foreground antialiased",
-          fontSans.variable,
-          fontSerif.variable,
-          fontMono.variable
-        )}
+}>) => (
+  <html lang="en" suppressHydrationWarning>
+    <body
+      className={cn(
+        "min-h-screen bg-background font-sans text-foreground antialiased",
+        fontSans.variable,
+        fontSerif.variable,
+        fontMono.variable
+      )}
+    >
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="system"
+        enableSystem
+        disableTransitionOnChange
       >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <TooltipProvider>{children}</TooltipProvider>
-        </ThemeProvider>
-      </body>
-    </html>
-  );
-}
+        <TooltipProvider>{children}</TooltipProvider>
+      </ThemeProvider>
+    </body>
+  </html>
+);
+
+export default RootLayout;

@@ -1,6 +1,7 @@
 import { Participant } from "@relay-app/shared";
 import { MediaDeviceStatus } from "./stream-types";
 import { UserRole } from "@/store/app-store";
+import { LucideIcon } from "lucide-react";
 
 export interface StreamHeaderProps {
   roomCode: string;
@@ -16,7 +17,9 @@ export interface VideoStageProps {
   localVideoRef: React.RefObject<HTMLVideoElement>;
   participants: Participant[];
   selfId: string | undefined;
-  getRemoteVideoRef: (participantId: string) => (el: HTMLVideoElement | null) => void;
+  getRemoteVideoRef: (
+    participantId: string
+  ) => (el: HTMLVideoElement | null) => void;
   userRole: UserRole;
   isStreaming: boolean;
 }
@@ -62,4 +65,20 @@ export type JoinRoomDialogPropsType = {
   children: React.ReactNode;
 };
 
-export type JoinModeType = 'participate' | 'watch';
+export type JoinModeType = "participate" | "watch";
+export type FooterLink = 
+  | {
+      name: string;
+      href: string;
+      icon?: LucideIcon;
+    }
+  | {
+      name: string;
+      variant: "primary" | "purple" | "emerald" | "blue";
+    };
+export type NavLinkItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  description: string;
+};

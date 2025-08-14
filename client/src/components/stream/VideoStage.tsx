@@ -1,5 +1,6 @@
 "use client";
 
+import React, { useMemo } from "react";
 import { VideoStageProps } from "@/lib/types/ui-types";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +14,7 @@ import { cn } from "@/lib/utils";
 /**
  * @description Displays the mic and video status icons for a participant.
  */
-const MediaStatusIcons = ({ hasAudio, hasVideo }: { hasAudio: boolean; hasVideo: boolean }) => (
+const MediaStatusIcons = React.memo(({ hasAudio, hasVideo }: { hasAudio: boolean; hasVideo: boolean }) => (
     <div className="absolute bottom-3 right-3 z-10 flex gap-1">
         <div className={cn("p-1.5 rounded-full", hasAudio ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400")}>
             {hasAudio ? <Mic className="h-3.5 w-3.5" /> : <MicOff className="h-3.5 w-3.5" />}
@@ -22,12 +23,14 @@ const MediaStatusIcons = ({ hasAudio, hasVideo }: { hasAudio: boolean; hasVideo:
             {hasVideo ? <Video className="h-3.5 w-3.5" /> : <VideoOff className="h-3.5 w-3.5" />}
         </div>
     </div>
-);
+));
+
+MediaStatusIcons.displayName = 'MediaStatusIcons';
 
 /**
  * @description A reusable tile for displaying a single participant's video stream.
  */
-const VideoTile = ({
+const VideoTile = React.memo(({
     participant,
     videoRef,
     isLocal = false,
@@ -35,14 +38,35 @@ const VideoTile = ({
     participant: Participant;
     videoRef: React.Ref<HTMLVideoElement>;
     isLocal?: boolean;
-}) => (
-    <Card className="relative w-full aspect-video overflow-hidden bg-black border-white/10 shadow-lg">
+}) => {
+    console.log(`🎬 [VideoTile] Rendering ${isLocal ? 'local' : 'remote'} tile for participant ${participant.id}`);
+    
+    return (
+    <Card className="relative w-full overflow-hidden bg-black border-white/10 shadow-lg min-h-[300px]">
         <video
             ref={videoRef}
             autoPlay
             muted={isLocal}
             playsInline
-            className="w-full h-full object-cover"
+            controls={false}
+            data-local={isLocal}
+            className="w-full h-full object-cover cursor-pointer"
+            style={{ minHeight: '300px' }}
+            title="Click to play if video doesn't start automatically"
+            onLoadedMetadata={(e) => {
+                console.log(`🎥 [VideoTile] Video metadata loaded for ${isLocal ? 'local' : 'remote'} participant`);
+                const video = e.target as HTMLVideoElement;
+                if (!isLocal && video.paused) {
+                    video.play().catch(err => console.warn('VideoTile autoplay failed:', err));
+                }
+            }}
+            onCanPlay={(e) => {
+                console.log(`🎥 [VideoTile] Video can play for ${isLocal ? 'local' : 'remote'} participant`);
+                const video = e.target as HTMLVideoElement;
+                if (!isLocal && video.paused) {
+                    video.play().catch(err => console.warn('VideoTile canplay autoplay failed:', err));
+                }
+            }}
         />
         <div className="absolute top-3 left-3 z-10">
             <Badge variant="secondary" className="text-xs bg-black/70 text-white border-white/20">
@@ -51,7 +75,19 @@ const VideoTile = ({
         </div>
         <MediaStatusIcons hasAudio={participant.hasAudio} hasVideo={participant.hasVideo} />
     </Card>
-);
+    );
+}, (prevProps, nextProps) => {
+    // Custom comparison to prevent unnecessary re-renders
+    return (
+        prevProps.participant.id === nextProps.participant.id &&
+        prevProps.participant.hasVideo === nextProps.participant.hasVideo &&
+        prevProps.participant.hasAudio === nextProps.participant.hasAudio &&
+        prevProps.participant.isHost === nextProps.participant.isHost &&
+        prevProps.isLocal === nextProps.isLocal
+    );
+});
+
+VideoTile.displayName = 'VideoTile';
 
 /**
  * @description An overlay shown before the user starts their stream.
@@ -100,33 +136,53 @@ export function VideoStage({
     isStreaming,
     onStartStream,
 }: VideoStageProps & { onStartStream: () => void }) {
-    const self = participants.find((p) => p.id === selfId);
-    const remoteParticipant = participants.find((p) => p.id !== selfId && !p.isViewer);
-    const hasJoinedStream = self && (self.hasVideo || self.hasAudio);
+    const { self, remoteParticipant, hasJoinedStream } = useMemo(() => {
+        const selfParticipant = participants.find((p) => p.id === selfId);
+        const remote = participants.find((p) => p.id !== selfId && !p.isViewer);
+        const joined = selfParticipant && (selfParticipant.hasVideo || selfParticipant.hasAudio);
+        
+        return {
+            self: selfParticipant,
+            remoteParticipant: remote,
+            hasJoinedStream: joined
+        };
+    }, [participants, selfId]);
+
+    // Debug logging to help troubleshoot visibility issues (can be removed in production)
+    console.log("🎬 [VideoStage] Render state:", {
+        participantsCount: participants.length,
+        selfId,
+        remoteParticipantId: remoteParticipant?.id,
+        isStreaming,
+        hasJoinedStream,
+        showRemoteSlot: (isStreaming || remoteParticipant),
+        participants: participants.map(p => ({ id: p.id, hasVideo: p.hasVideo, hasAudio: p.hasAudio, isViewer: p.isViewer }))
+    });
 
     return (
         <div className="flex-1 p-4 overflow-y-auto">
             <div className={cn(
                 "grid grid-cols-1 gap-4",
-                isStreaming && remoteParticipant && "md:grid-cols-2"
+                (isStreaming || remoteParticipant) && remoteParticipant && "md:grid-cols-2"
             )}>
                 {/* Local Participant */}
                 {self && (
-                    <div className="relative">
+                    <div key={`local-${self.id}`} className="relative">
                         <VideoTile participant={self} videoRef={localVideoRef} isLocal />
                         {!hasJoinedStream && <StartStreamOverlay onStartStream={onStartStream} userRole={userRole} />}
                     </div>
                 )}
 
                 {/* Remote Participant or Placeholder */}
-                {isStreaming && (
+                {(isStreaming || remoteParticipant) && (
                     remoteParticipant ? (
                         <VideoTile
+                            key={`remote-${remoteParticipant.id}`}
                             participant={remoteParticipant}
                             videoRef={getRemoteVideoRef(remoteParticipant.id)}
                         />
                     ) : (
-                        <WaitingForParticipantCard />
+                        <WaitingForParticipantCard key="waiting" />
                     )
                 )}
             </div>

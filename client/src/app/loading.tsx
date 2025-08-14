@@ -1,41 +1,39 @@
-// src/app/loading.tsx
+"use client";
 
-'use client';
-
-import { useState, useEffect, useMemo } from 'react';
-import { Badge } from '@/components/ui/badge';
-import { Loader2, CheckCircle, Radio } from 'lucide-react';
-import Hyperspeed from '@/components/ui/backgrounds/Hyperspeed/Hyperspeed';
-import { funFacts, hyperspeedConfig, loadingSteps } from '@/lib/config/loading-config';
+import { useState, useEffect, useMemo } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Loader2, CheckCircle, Radio } from "lucide-react";
+import Hyperspeed from "@/components/ui/backgrounds/Hyperspeed/Hyperspeed";
+import {
+  funFacts,
+  hyperspeedConfig,
+  loadingSteps,
+} from "@/lib/config/loading-config";
 
 // --- Child Components (can be moved to separate files) ---
 
 /**
  * Renders a single step in the loading process with dynamic status.
  */
-const LoadingStep = ({
-  Icon,
-  text,
-  status,
-}: {
+const LoadingStep: React.FC<{
   Icon: React.ElementType;
   text: string;
-  status: 'active' | 'completed' | 'pending';
-}) => {
-  const isActive = status === 'active';
-  const isCompleted = status === 'completed';
+  status: "active" | "completed" | "pending";
+}> = ({ Icon, text, status }) => {
+  const isActive = status === "active";
+  const isCompleted = status === "completed";
 
   return (
     <div
       className={`flex items-center gap-3 rounded-lg p-3 backdrop-blur-sm border transition-all duration-500 ${
         isActive
-          ? 'bg-primary/10 border-primary/20 scale-105'
-          : 'bg-white/5 border-white/10'
+          ? "bg-primary/10 border-primary/20 scale-105"
+          : "bg-white/5 border-white/10"
       }`}
     >
       <div
         className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
-          isActive || isCompleted ? 'bg-primary/20' : 'bg-white/10'
+          isActive || isCompleted ? "bg-primary/20" : "bg-white/10"
         }`}
       >
         {isCompleted ? (
@@ -48,7 +46,7 @@ const LoadingStep = ({
       </div>
       <span
         className={`text-sm font-medium transition-colors ${
-          isActive ? 'text-foreground' : 'text-muted-foreground'
+          isActive ? "text-foreground" : "text-muted-foreground"
         }`}
       >
         {text}
@@ -60,25 +58,27 @@ const LoadingStep = ({
 /**
  * Displays a rotating fun fact.
  */
-const FunFact = ({ facts }: { facts: string[] }) => {
+const FunFact: React.FC<{ facts: string[] }> = ({ facts }) => {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setIndex(prev => (prev + 1) % facts.length);
+      setIndex((prev) => (prev + 1) % facts.length);
     }, 4000); // Change fact every 4 seconds
     return () => clearInterval(timer);
   }, [facts.length]);
 
   return (
-    <p className="text-sm text-muted-foreground animate-pulse">{facts[index]}</p>
+    <p className="text-sm text-muted-foreground animate-pulse">
+      {facts[index]}
+    </p>
   );
 };
 
 /**
  * The main loading page component.
  */
-export default function Loading() {
+const Loading: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const progress = useMemo(
     () => (currentStep / loadingSteps.length) * 100,
@@ -94,7 +94,7 @@ export default function Loading() {
     }
 
     const timer = setTimeout(() => {
-      setCurrentStep(prev => prev + 1);
+      setCurrentStep((prev) => prev + 1);
     }, loadingSteps[currentStep].duration);
 
     return () => clearTimeout(timer);
@@ -145,10 +145,10 @@ export default function Loading() {
                 text={step.text}
                 status={
                   index < currentStep
-                    ? 'completed'
+                    ? "completed"
                     : index === currentStep
-                    ? 'active'
-                    : 'pending'
+                    ? "active"
+                    : "pending"
                 }
               />
             ))}
@@ -178,4 +178,6 @@ export default function Loading() {
       </div>
     </div>
   );
-}
+};
+
+export default Loading;

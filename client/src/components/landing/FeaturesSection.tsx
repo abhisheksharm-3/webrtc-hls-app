@@ -29,7 +29,7 @@ const FeatureCard = ({ feature }: { feature: Feature }) => {
 /**
  * @description The landing page section that showcases the core features of the platform.
  */
-export function FeaturesSection() {
+export const FeaturesSection = () => {
   return (
     <section id="features" className="relative py-24 sm:py-32">
       <div
@@ -63,4 +63,4 @@ export function FeaturesSection() {
       </div>
     </section>
   );
-}
+};

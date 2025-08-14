@@ -28,15 +28,15 @@ export function createMediasoupManager(socket: TypedSocket, iceServers: RTCIceSe
     payload: Parameters<ClientToServerEvents[E]>[0]
   ): Promise<AckResponse<Parameters<ClientToServerEvents[E]>[1]>> => {
     return new Promise((resolve, reject) => {
-      const ack = (response: { error?: string }) => {
+      const ack = (response: { error?: string | Error }) => {
         if (response.error) {
-          reject(new Error(response.error));
+          reject(response.error instanceof Error ? response.error : new Error(String(response.error)));
         } else {
           resolve(response as AckResponse<Parameters<ClientToServerEvents[E]>[1]>);
         }
       };
       
-      // Fix: Use spread operator to match the exact function signature
+      // Use spread operator to match the exact function signature
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (socket.emit as any)(event, payload, ack);
     });
@@ -55,31 +55,47 @@ export function createMediasoupManager(socket: TypedSocket, iceServers: RTCIceSe
   const createTransport = async (direction: "send" | "recv"): Promise<Transport> => {
     if (!device) throw new Error("Device not loaded, cannot create transport.");
     
-    // ✅ FIX: `params` is now correctly typed as WebRtcTransportParams
     const params = await emitWithAck("create-transport", { direction });
     
     const transport = direction === "send"
       ? device.createSendTransport({ ...params, iceServers })
       : device.createRecvTransport({ ...params, iceServers });
 
+    // Listener for the initial connection setup
     transport.on("connect", async ({ dtlsParameters }: { dtlsParameters: DtlsParameters }, callback, errback) => {
       try {
+        console.log(`🤝 [TRANSPORT] Event 'connect' for ${direction} transport`);
         await emitWithAck("connect-transport", { transportId: transport.id, dtlsParameters });
         callback();
-      } catch (err) { errback(err as Error); }
+      } catch (err) { 
+        console.error(`❌ [TRANSPORT] Error in 'connect' event for ${direction} transport:`, err);
+        errback(err as Error); 
+      }
+    });
+
+    // ✨ KEY ADDITION: Listener for the ongoing connection state
+    transport.on("connectionstatechange", (state: RTCPeerConnectionState) => {
+        console.log(`🚦 [TRANSPORT] Connection state for ${direction} transport changed to: ${state.toUpperCase()}`);
+        if (state === 'failed') {
+          console.error(`❌ [TRANSPORT] ${direction} transport connection failed! This is likely a network or server configuration issue.`);
+          // Optionally, you could close the transport here or attempt a restart.
+          // transport.close(); 
+        }
     });
 
     if (direction === "send") {
       transport.on("produce", async (producerParams, callback, errback) => {
         try {
-          // ✅ FIX: The response is now correctly typed as { id: string }
           const { id } = await emitWithAck("produce", {
             transportId: transport.id,
             kind: producerParams.kind,
             rtpParameters: producerParams.rtpParameters,
           });
           callback({ id });
-        } catch (err) { errback(err as Error); }
+        } catch (err) { 
+          console.error(`❌ [TRANSPORT] Error in 'produce' event:`, err);
+          errback(err as Error); 
+        }
       });
       sendTransport = transport;
     } else {
@@ -97,10 +113,16 @@ export function createMediasoupManager(socket: TypedSocket, iceServers: RTCIceSe
     if (!recvTransport || !device) throw new Error("Receive transport or device not available.");
     const { rtpCapabilities } = device;
     
-    // ✅ FIX: `data` is now correctly typed
     const data = await emitWithAck("consume", { producerId, rtpCapabilities });
     
-    return recvTransport.consume({ ...data, appData: { participantId } });
+    const consumer = await recvTransport.consume({ 
+      ...data, 
+      appData: { participantId } 
+    });
+
+    console.log(`✅ Consumer created: ${consumer.id} for producer: ${producerId} (initially paused)`);
+    
+    return consumer;
   };
 
   const close = () => {
@@ -108,6 +130,7 @@ export function createMediasoupManager(socket: TypedSocket, iceServers: RTCIceSe
     recvTransport?.close();
   };
 
+  // Removed connectRecvTransport as it's not needed with the new robust listeners
   return { loadDevice, createTransport, produce, consume, close };
 }
 

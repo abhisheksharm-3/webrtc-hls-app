@@ -10,8 +10,7 @@ import { CTASection } from "@/components/landing/CTASection";
  * The main landing page component for the application.
  * It serves as the central hub for users to create, join, or watch a stream.
  */
-export default function HomePage() {
-
+const HomePage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/5">
       <Header />
@@ -25,4 +24,6 @@ export default function HomePage() {
       <Footer />
     </div>
   );
-}
+};
+
+export default HomePage;
