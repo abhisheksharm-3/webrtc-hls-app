@@ -78,6 +78,20 @@ export async function startRecording(
 
     // 2. Select the first available audio and video producers
     const { videoProducer, audioProducer } = selectProducers(room);
+    
+    // Check if we have at least one producer (audio-only streams are acceptable)
+    if (!videoProducer && !audioProducer) {
+      throw new Error(`No active producers found in room ${room.id}. Cannot start HLS stream.`);
+    }
+    
+    // Filter out undefined producers for the consumer creation
+    const availableProducers = [videoProducer, audioProducer].filter(Boolean) as mediasoupTypes.Producer[];
+    
+    if (availableProducers.length === 0) {
+      throw new Error(`No valid producers available for HLS in room ${room.id}`);
+    }
+    
+    logger.info(`🎬 [HLS] Starting HLS with ${availableProducers.length} producer(s): ${availableProducers.map(p => p.kind).join(', ')}`);
 
     // 3. Find available network ports for RTP/RTCP
     const hlsPorts = await findAvailablePorts();
@@ -87,7 +101,7 @@ export async function startRecording(
     const { transports, consumers, pairs } =
       await createRtpTransportsAndConsumers(
         room.router,
-        [videoProducer, audioProducer],
+        availableProducers,
         hlsPorts,
       );
     logger.info(`[HLS] Created ${transports.length} transports and ${consumers.length} consumers.`);
@@ -238,21 +252,28 @@ async function ensureHlsDirectory(): Promise<string> {
  * @throws If either a video or audio producer is not found.
  */
 function selectProducers(room: LiveRoom): {
-  videoProducer: mediasoupTypes.Producer;
-  audioProducer: mediasoupTypes.Producer;
+  videoProducer?: mediasoupTypes.Producer;
+  audioProducer?: mediasoupTypes.Producer;
 } {
   const allProducers = Array.from(room.participants.values()).flatMap((p) =>
     Array.from((p as any)["producers"].values() as mediasoupTypes.Producer[]),
-  ).filter((p) => !p.closed);
+  ).filter((p) => !p.closed && !p.paused);
 
   const videoProducer = allProducers.find((p) => p.kind === "video");
   const audioProducer = allProducers.find((p) => p.kind === "audio");
 
-  if (!videoProducer || !audioProducer) {
-    throw new Error(`Required producers not found. Video: ${!!videoProducer}, Audio: ${!!audioProducer}`);
+  logger.info(`🎬 [HLS] Available producers: ${allProducers.map(p => `${p.kind}(${p.id.substring(0,8)})`).join(', ')}`);
+  logger.info(`🎬 [HLS] Selected producers: Video=${videoProducer ? videoProducer.id.substring(0,8) : 'NONE'}, Audio=${audioProducer ? audioProducer.id.substring(0,8) : 'NONE'}`);
+
+  // Log missing producer types for debugging
+  const missingTypes = [];
+  if (!videoProducer) missingTypes.push('video');
+  if (!audioProducer) missingTypes.push('audio');
+  
+  if (missingTypes.length > 0) {
+    logger.warn(`🎬 [HLS] Missing producer types: ${missingTypes.join(', ')}. Available: ${allProducers.map(p => p.kind).join(', ')}`);
   }
 
-  logger.info(`[HLS] Selected producers: Video=${videoProducer.id}, Audio=${audioProducer.id}`);
   return { videoProducer, audioProducer };
 }
 
@@ -351,19 +372,30 @@ function generateSdp(pairs: TransportConsumerPair[], ports: HlsPorts): string {
     const rtpPort = kind === 'video' ? ports.videoRtpPort : ports.audioRtpPort;
     const rtcpPort = kind === 'video' ? ports.videoRtcpPort : ports.audioRtcpPort;
 
+    logger.info(`🎬 [SDP] Generating ${kind} track: codec=${codec.mimeType}, payloadType=${codec.payloadType}, clockRate=${codec.clockRate}, parameters=${JSON.stringify(codec.parameters || {})}`);
+
     sdpParts.push(
       `m=${kind} ${rtpPort} RTP/AVP ${codec.payloadType}`,
       `a=rtcp:${rtcpPort}`,
       `a=sendrecv`,
       `a=rtpmap:${codec.payloadType} ${codec.mimeType.split("/")[1]}/${codec.clockRate}${codec.channels ? `/${codec.channels}` : ""}`,
     );
-    if (codec.parameters) {
+    
+    // Add codec-specific format parameters
+    if (codec.parameters && Object.keys(codec.parameters).length > 0) {
       for (const [key, value] of Object.entries(codec.parameters)) {
         sdpParts.push(`a=fmtp:${codec.payloadType} ${key}=${value}`);
       }
+    } else if (kind === 'video' && codec.mimeType.toLowerCase().includes('vp8')) {
+      // Add default VP8 parameters if none are provided
+      logger.warn(`🎬 [SDP] No codec parameters for VP8, adding default max-fr and max-fs`);
+      sdpParts.push(`a=fmtp:${codec.payloadType} max-fr=30;max-fs=3600`);
     }
   }
-  return sdpParts.join("\r\n") + "\r\n";
+  
+  const sdpContent = sdpParts.join("\r\n") + "\r\n";
+  logger.info(`🎬 [SDP] Generated SDP content:\n${sdpContent}`);
+  return sdpContent;
 }
 
 /**
@@ -381,18 +413,39 @@ function runFfmpeg(sdpPath: string, outputDir: string, roomId: string): ChildPro
   const args = [
     // Instruct FFmpeg to process the SDP file.
     "-protocol_whitelist", "file,udp,rtp",
+    
+    // Increase probe size and analyze duration to better detect video streams
+    "-analyzeduration", "10000000",  // 10 seconds (increased)
+    "-probesize", "50000000",        // 50MB (increased significantly)
+    
+    // Force FFmpeg to wait for keyframes and properly analyze streams
+    "-fflags", "+genpts+ignidx",
+    "-avoid_negative_ts", "make_zero",
+    
     "-i", sdpPath,
 
-    // Video codec settings
+    // Explicitly map both video and audio streams
+    "-map", "0:v?",  // Map video if available (? makes it optional)
+    "-map", "0:a?",  // Map audio if available (? makes it optional)
+
+    // Video codec settings - handle VP8 streams without dimensions
     "-c:v", "libx264",
-    "-preset", "veryfast", // A good balance of quality and CPU usage
+    "-preset", "ultrafast",  // Fastest preset for real-time
     "-tune", "zerolatency",
-    "-crf", "23", // Constant Rate Factor (lower is better quality, 18-28 is a sane range)
+    "-crf", "23",
     "-pix_fmt", "yuv420p",
+    
+    // Enhanced video filter for VP8 streams without size info
+    "-vf", "scale=640:480:force_original_aspect_ratio=decrease,pad=640:480:(ow-iw)/2:(oh-ih)/2",
+    "-r", "30", // Force 30fps
+    "-g", "60", // GOP size (2 seconds at 30fps)
+    "-keyint_min", "30", // Minimum keyframe interval
 
     // Audio codec settings
     "-c:a", "aac",
     "-b:a", "128k",
+    "-ar", "48000", // Force sample rate
+    "-ac", "2",     // Force stereo
 
     // HLS output settings
     "-f", "hls",

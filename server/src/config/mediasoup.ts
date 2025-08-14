@@ -84,8 +84,17 @@ export const mediasoupConfig = {
     enableUdp: !MEDIASOUP_FORCE_TCP,
     enableTcp: true,
     preferUdp: !MEDIASOUP_FORCE_TCP,
+    // Enable TCP/TLS as fallback for better connectivity
+    preferTcp: false,
     // A sensible starting bitrate for new connections.
     initialAvailableOutgoingBitrate: 1_000_000, // 1 Mbps
+    // Increase max incoming bitrate for better quality
+    maxIncomingBitrate: 1_500_000,
+    // Add port restrictions for better firewall compatibility
+    enableSctp: false,
+    numSctpStreams: { OS: 1024, MIS: 1024 },
+    // Improve DTLS connectivity
+    dtlsRole: 'auto' as const,
     // appData can be used to associate this transport with a specific user or session.
     appData: { transportType: 'webrtc-client' },
   } as mediasoupTypes.WebRtcTransportOptions,

@@ -80,6 +80,18 @@ export function createMediasoupManager(socket: TypedSocket, iceServers: RTCIceSe
           console.error(`❌ [TRANSPORT] ${direction} transport connection failed! This is likely a network or server configuration issue.`);
           // Optionally, you could close the transport here or attempt a restart.
           // transport.close(); 
+        } else if (state === 'disconnected') {
+          console.warn(`⚠️ [TRANSPORT] ${direction} transport disconnected, may recover automatically`);
+        } else if (state === 'connected') {
+          console.log(`✅ [TRANSPORT] ${direction} transport successfully connected`);
+        }
+    });
+
+    // Add ICE gathering state monitoring
+    transport.on("icegatheringstatechange", (state: RTCIceGatheringState) => {
+        console.log(`🧊 [ICE] ICE gathering state for ${direction} transport changed to: ${state.toUpperCase()}`);
+        if (state === 'complete') {
+          console.log(`✅ [ICE] ${direction} transport ICE gathering completed`);
         }
     });
 

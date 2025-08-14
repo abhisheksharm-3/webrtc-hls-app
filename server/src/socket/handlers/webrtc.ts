@@ -10,7 +10,7 @@ import { createProducer, getProducer } from '../../mediasoup/producer';
 import { createConsumer, resumeConsumer } from '../../mediasoup/consumer';
 import { getLiveParticipant } from '../../services/ParticipantService';
 import { getLiveRoom, updateRoom } from '../../services/RoomService';
-import { startRecording } from '../../services/HLSService';
+import { startRecording, stopRecording } from '../../services/HLSService';
 
 export function registerWebRtcHandlers(io: Server, socket: Socket): void {
 
@@ -57,7 +57,15 @@ export function registerWebRtcHandlers(io: Server, socket: Socket): void {
    */
   socket.on('connect-transport', async (data: { transportId: string, dtlsParameters: mediasoupTypes.DtlsParameters }, callback) => {
     try {
-      await connectTransport(data.transportId, data.dtlsParameters);
+      // Add timeout for connection attempt
+      const connectPromise = connectTransport(data.transportId, data.dtlsParameters);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Transport connection timeout')), 10000)
+      );
+      
+      await Promise.race([connectPromise, timeoutPromise]);
+      
+      logger.info(`✅ Transport connected successfully | transportId: ${data.transportId}`);
       callback({ connected: true });
     } catch (error) {
       logger.error(`Error in 'connect-transport' for socket ${socket.id}:`, error);
@@ -95,16 +103,39 @@ export function registerWebRtcHandlers(io: Server, socket: Socket): void {
         participantId: participant.id,
       });
 
-      // Auto-start HLS when the host begins producing both audio and video
+      // Auto-start HLS when the host begins producing media
       const room = getLiveRoom(participant.roomId);
-      if (room && participant.isHost && participant.hasAudio && participant.hasVideo && !room.hlsProcess) {
-        try {
-          const { playlistUrl } = await startRecording(room);
-          await updateRoom(room.id, { hlsUrl: playlistUrl });
-          io.to(room.id).emit('hls-started', { roomId: room.id, playlistUrl });
-          logger.info(`✅ Auto-started HLS for room ${room.id}`);
-        } catch (e) {
-          logger.error(`Failed to auto-start HLS for room ${room.id}:`, e);
+      if (room && participant.isHost) {
+        // If HLS is not running and we have audio, start HLS (audio-only is acceptable)
+        if (!room.hlsProcess && participant.hasAudio) {
+          try {
+            const { playlistUrl } = await startRecording(room);
+            await updateRoom(room.id, { hlsUrl: playlistUrl });
+            io.to(room.id).emit('hls-started', { roomId: room.id, playlistUrl });
+            logger.info(`✅ Auto-started HLS for room ${room.id} with ${participant.hasVideo ? 'audio+video' : 'audio-only'}`);
+          } catch (e) {
+            logger.error(`Failed to auto-start HLS for room ${room.id}:`, e);
+          }
+        }
+        // If HLS is running with audio-only and we just got video, restart HLS for better quality
+        else if (room.hlsProcess && data.kind === 'video' && participant.hasAudio) {
+          try {
+            logger.info(`🔄 Restarting HLS for room ${room.id} to include video track`);
+            await stopRecording(room);
+            // Small delay to ensure cleanup is complete
+            setTimeout(async () => {
+              try {
+                const { playlistUrl } = await startRecording(room);
+                await updateRoom(room.id, { hlsUrl: playlistUrl });
+                io.to(room.id).emit('hls-restarted', { roomId: room.id, playlistUrl });
+                logger.info(`✅ Restarted HLS for room ${room.id} with audio+video`);
+              } catch (e) {
+                logger.error(`Failed to restart HLS for room ${room.id}:`, e);
+              }
+            }, 1000);
+          } catch (e) {
+            logger.error(`Failed to restart HLS for room ${room.id}:`, e);
+          }
         }
       }
     } catch (error) {
@@ -167,12 +198,30 @@ socket.on('consume', async (data: { producerId: string, rtpCapabilities: mediaso
     // This gives the client transport time to connect if it hasn't already
     setTimeout(async () => {
       try {
+        // Check if consumer and transport are still valid before resuming
+        if (consumer.closed) {
+          logger.warn(`Consumer ${consumer.id} was closed before resume attempt`);
+          return;
+        }
+        
+        if (transport.closed) {
+          logger.warn(`Transport ${transport.id} was closed before consumer resume`);
+          return;
+        }
+
         await resumeConsumer(consumer.id);
         logger.info(`✅ Consumer resumed: ${consumer.id} for producer: ${data.producerId}`);
       } catch (error) {
         logger.error(`Failed to resume consumer ${consumer.id}:`, error);
+        // Clean up consumer if resume fails
+        try {
+          consumerParticipant.consumers.delete(consumer.id);
+          consumer.close();
+        } catch (cleanupError) {
+          logger.error(`Failed to cleanup consumer ${consumer.id}:`, cleanupError);
+        }
       }
-    }, 500); // Wait 500ms for client to be ready
+    }, 1000); // Increased wait time to 1 second for better transport stability
 
   } catch (error) {
     logger.error(`Error in 'consume' for socket ${socket.id}:`, error);

@@ -22,6 +22,7 @@ export interface ServerToClientEvents {
   "new-producer": (payload: { producerId: string; participantId: string }) => void;
   "producer-closed": (payload: { producerId: string }) => void;
   "hls-started": (payload: { hlsUrl: string }) => void;
+  "hls-restarted": (payload: { roomId: string; playlistUrl: string }) => void;
   "hls-stopped": () => void;
 }
 

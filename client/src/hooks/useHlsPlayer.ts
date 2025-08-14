@@ -69,18 +69,42 @@ export const useHlsPlayer = (url: string | null) => {
   // --- Player Setup and Teardown ---
 
   const setupHlsJsPlayer = useCallback((video: HTMLVideoElement, streamUrl: string) => {
+    console.log('🎬 [HLS.js] Setting up HLS.js player with URL:', streamUrl);
+    
+    // Test URL accessibility first
+    fetch(streamUrl)
+      .then(response => {
+        console.log('🌐 [HLS.js] URL test response:', response.status, response.statusText);
+        if (!response.ok) {
+          console.error('❌ [HLS.js] HLS URL not accessible:', response.status);
+        }
+        return response.text();
+      })
+      .then(data => {
+        console.log('📄 [HLS.js] M3U8 content preview:', data.substring(0, 200) + '...');
+      })
+      .catch(err => {
+        console.error('❌ [HLS.js] Failed to fetch M3U8:', err);
+      });
+    
     const hls = new Hls({
       // More resilient configuration for production
       maxBufferLength: 30,
       maxMaxBufferLength: 600,
       lowLatencyMode: true,
       enableWorker: true,
+      debug: true, // Enable debug logging
     });
     hlsInstanceRef.current = hls;
 
     hls.on(HlsEvents.MANIFEST_PARSED, (_, data) => {
+      console.log('✅ [HLS.js] Manifest parsed successfully:', data);
       const level = data.levels?.[0];
       if (level) {
+        console.log('📊 [HLS.js] Stream info:', {
+          resolution: { width: level.width, height: level.height },
+          bitrate: level.bitrate
+        });
         dispatch({
           type: 'SET_STREAM_INFO',
           payload: {
@@ -89,31 +113,52 @@ export const useHlsPlayer = (url: string | null) => {
           },
         });
       }
-      video.play().then(() => dispatch({ type: 'PLAYBACK_SUCCESS' })).catch(() => dispatch({ type: 'PLAYBACK_FAILED' }));
+      
+      console.log('▶️ [HLS.js] Attempting to start playback...');
+      video.play()
+        .then(() => {
+          console.log('✅ [HLS.js] Playback started successfully');
+          dispatch({ type: 'PLAYBACK_SUCCESS' });
+        })
+        .catch(err => {
+          console.error('❌ [HLS.js] Playback failed:', err);
+          dispatch({ type: 'PLAYBACK_FAILED' });
+        });
     });
 
     hls.on(HlsEvents.ERROR, (_, data: ErrorData) => {
+      console.error('🚨 [HLS.js] Error occurred:', data);
+      
       if (data.fatal) {
         let errorMessage = 'An unknown stream error occurred.';
         switch (data.type) {
           case ErrorTypes.NETWORK_ERROR:
             errorMessage = 'Network error: The stream may be offline or starting up.';
+            console.error('🌐 [HLS.js] Network error details:', data);
             // HLS.js has built-in retry logic, so we just inform the user.
             break;
           case ErrorTypes.MEDIA_ERROR:
             errorMessage = 'Media error: There is a problem with the stream\'s format.';
+            console.error('🎬 [HLS.js] Media error details:', data);
+            console.log('🔄 [HLS.js] Attempting to recover from media error...');
             hls.recoverMediaError(); // Attempt to recover from media errors
             break;
           default:
+            console.error('💥 [HLS.js] Fatal error, destroying player:', data);
             hls.destroy(); // Destroy on other fatal errors
             break;
         }
         dispatch({ type: 'ERROR', payload: errorMessage });
+      } else {
+        console.warn('⚠️ [HLS.js] Non-fatal error:', data);
       }
     });
 
+    console.log('🔗 [HLS.js] Loading source and attaching to video...');
     hls.loadSource(streamUrl);
     hls.attachMedia(video);
+    
+    console.log('🔗 [HLS.js] HLS source loaded and attached to video element');
   }, []);
 
   const setupNativePlayer = useCallback((video: HTMLVideoElement, streamUrl: string) => {
@@ -124,18 +169,30 @@ export const useHlsPlayer = (url: string | null) => {
   // --- Main Effect for Player Lifecycle ---
   useEffect(() => {
     const video = videoRef.current;
+    console.log('🎬 [HLS HOOK] Effect triggered. URL:', url, 'Video element:', !!video);
+    
     if (!url || !video) {
-      if (!url) dispatch({ type: 'ERROR', payload: 'No stream URL provided.' });
+      if (!url) {
+        console.warn('⚠️ [HLS HOOK] No stream URL provided');
+        dispatch({ type: 'ERROR', payload: 'No stream URL provided.' });
+      }
       return;
     }
 
+    console.log('🎬 [HLS HOOK] Initializing player with URL:', url);
+
     const initializePlayer = () => {
+      console.log('🎬 [HLS HOOK] Starting player initialization...');
       dispatch({ type: 'ATTEMPT_PLAY' });
+      
       if (Hls.isSupported()) {
+        console.log('✅ [HLS HOOK] HLS.js is supported, using HLS.js player');
         setupHlsJsPlayer(video, url);
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        console.log('✅ [HLS HOOK] Native HLS supported, using native player');
         setupNativePlayer(video, url);
       } else {
+        console.error('❌ [HLS HOOK] HLS playback not supported');
         dispatch({ type: 'ERROR', payload: 'HLS playback is not supported in this browser.' });
       }
     };
@@ -153,15 +210,25 @@ export const useHlsPlayer = (url: string | null) => {
     };
     
     const cleanupPlayer = () => {
+      console.log('🧹 [HLS HOOK] Cleaning up player');
       removeEventListeners();
       hlsInstanceRef.current?.destroy();
       dispatch({ type: 'RESET' });
     };
 
     // Event handlers to sync React state with video element state
-    const handlePlay = () => dispatch({ type: 'PLAYBACK_SUCCESS' });
-    const handlePause = () => dispatch({ type: 'PLAYBACK_FAILED' });
-    const handleVolumeChange = () => dispatch({ type: 'SET_MUTED', payload: video.muted });
+    const handlePlay = () => {
+      console.log('▶️ [HLS HOOK] Video started playing');
+      dispatch({ type: 'PLAYBACK_SUCCESS' });
+    };
+    const handlePause = () => {
+      console.log('⏸️ [HLS HOOK] Video paused');
+      dispatch({ type: 'PLAYBACK_FAILED' });
+    };
+    const handleVolumeChange = () => {
+      console.log('🔊 [HLS HOOK] Volume changed, muted:', video.muted);
+      dispatch({ type: 'SET_MUTED', payload: video.muted });
+    };
 
     initializePlayer();
     addEventListeners();

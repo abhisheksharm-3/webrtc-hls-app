@@ -39,7 +39,30 @@ export async function createWebRtcTransport(
     transport.on('dtlsstatechange', (dtlsState) => {
       if (dtlsState === 'failed' || dtlsState === 'closed') {
         logger.warn(`Transport DTLS state changed to: ${dtlsState} | transportId: ${transport.id}`);
+      } else {
+        logger.info(`Transport DTLS state changed to: ${dtlsState} | transportId: ${transport.id}`);
       }
+    });
+
+    // Add ICE state change monitoring
+    transport.on('icestatechange', (iceState) => {
+      logger.info(`Transport ICE state changed to: ${iceState} | transportId: ${transport.id}`);
+      if (iceState === 'closed') {
+        logger.warn(`Transport ICE connection issue: ${iceState} | transportId: ${transport.id}`);
+      }
+    });
+
+    // Add general transport state monitoring
+    transport.observer.on('close', () => {
+      logger.info(`Transport observer: transport closed | transportId: ${transport.id}`);
+    });
+
+    transport.observer.on('newproducer', (producer) => {
+      logger.info(`Transport observer: new producer created | transportId: ${transport.id}, producerId: ${producer.id}`);
+    });
+
+    transport.observer.on('newconsumer', (consumer) => {
+      logger.info(`Transport observer: new consumer created | transportId: ${transport.id}, consumerId: ${consumer.id}`);
     });
 
     logger.info(`✅ WebRTC transport created | transportId: ${transport.id}`);

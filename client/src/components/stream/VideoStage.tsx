@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useEffect, useRef } from "react";
+import React, { useMemo } from "react";
 import { VideoStageProps } from "@/lib/types/ui-types";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -39,28 +39,11 @@ const VideoTile = React.memo(({
   videoRef: React.Ref<HTMLVideoElement>;
   isLocal?: boolean;
 }) => {
-  const internalVideoRef = useRef<HTMLVideoElement | null>(null);
-
-  // Effect to handle playing the video stream once the element is ready.
-  useEffect(() => {
-    const videoNode = internalVideoRef.current;
-    if (videoNode && videoNode.paused && !isLocal) {
-      videoNode.play().catch(err => console.warn('VideoTile autoplay was prevented:', err));
-    }
-  }, [isLocal]);
-
   return (
     <Card className="relative w-full overflow-hidden bg-black border-white/10 shadow-lg aspect-video">
       <video
-        ref={(node) => {
-          internalVideoRef.current = node;
-          if (typeof videoRef === 'function') {
-            videoRef(node);
-          } else if (videoRef) {
-            (videoRef as React.MutableRefObject<HTMLVideoElement | null>).current = node;
-          }
-        }}
-        autoPlay
+        ref={videoRef}
+        autoPlay={isLocal} // Enable autoplay for local video only
         muted={isLocal}
         playsInline
         controls={false}

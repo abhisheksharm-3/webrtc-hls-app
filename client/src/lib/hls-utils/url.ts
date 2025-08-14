@@ -8,7 +8,7 @@
  * @param {string | null} roomId - The room ID.
  * @returns {string | null} The full HLS URL or null if no room ID is provided.
  */
-export const getHlsUrl = (roomId: string | null): string | null => {
+export const getHlsUrl = async (roomId: string | null): Promise<string | null> => {
   if (!roomId) return null;
 
   // Fallback ensures the URL is constructed even if env variables are missing during development.
