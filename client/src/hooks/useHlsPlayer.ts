@@ -31,6 +31,9 @@ const initialState: PlayerState = {
   streamInfo: null,
 };
 
+/**
+ * Reducer to manage the complex state of the HLS player.
+ */
 const playerReducer = (state: PlayerState, action: PlayerAction): PlayerState => {
   switch (action.type) {
     case 'ATTEMPT_PLAY':
@@ -52,9 +55,9 @@ const playerReducer = (state: PlayerState, action: PlayerAction): PlayerState =>
   }
 };
 
-
 /**
- * A custom React hook to manage an HLS video player using a reducer for robust state management.
+ * A custom React hook to manage an HLS video player. It provides robust state
+ * management, error handling, and playback controls.
  * @param url The HLS playlist URL (.m3u8) to play.
  * @returns An object containing the video ref, player state, and control actions.
  */
@@ -63,11 +66,16 @@ export const useHlsPlayer = (url: string | null) => {
   const hlsInstanceRef = useRef<Hls | null>(null);
   const [state, dispatch] = useReducer(playerReducer, initialState);
 
-  /**
-   * Sets up an Hls.js instance for browsers that support it.
-   */
+  // --- Player Setup and Teardown ---
+
   const setupHlsJsPlayer = useCallback((video: HTMLVideoElement, streamUrl: string) => {
-    const hls = new Hls({ lowLatencyMode: true, enableWorker: true });
+    const hls = new Hls({
+      // More resilient configuration for production
+      maxBufferLength: 30,
+      maxMaxBufferLength: 600,
+      lowLatencyMode: true,
+      enableWorker: true,
+    });
     hlsInstanceRef.current = hls;
 
     hls.on(HlsEvents.MANIFEST_PARSED, (_, data) => {
@@ -90,9 +98,14 @@ export const useHlsPlayer = (url: string | null) => {
         switch (data.type) {
           case ErrorTypes.NETWORK_ERROR:
             errorMessage = 'Network error: The stream may be offline or starting up.';
+            // HLS.js has built-in retry logic, so we just inform the user.
             break;
           case ErrorTypes.MEDIA_ERROR:
             errorMessage = 'Media error: There is a problem with the stream\'s format.';
+            hls.recoverMediaError(); // Attempt to recover from media errors
+            break;
+          default:
+            hls.destroy(); // Destroy on other fatal errors
             break;
         }
         dispatch({ type: 'ERROR', payload: errorMessage });
@@ -103,55 +116,60 @@ export const useHlsPlayer = (url: string | null) => {
     hls.attachMedia(video);
   }, []);
 
-  /**
-   * Sets up the native video player for browsers like Safari.
-   */
   const setupNativePlayer = useCallback((video: HTMLVideoElement, streamUrl: string) => {
     video.src = streamUrl;
     video.play().then(() => dispatch({ type: 'PLAYBACK_SUCCESS' })).catch(() => dispatch({ type: 'PLAYBACK_FAILED' }));
   }, []);
 
-  // --- Main Effect for Initializing the Player ---
+  // --- Main Effect for Player Lifecycle ---
   useEffect(() => {
-    if (!url || !videoRef.current) {
-        if (!url) dispatch({ type: 'ERROR', payload: 'No stream URL provided.' });
-        return;
-    }
-
     const video = videoRef.current;
-    dispatch({ type: 'ATTEMPT_PLAY' });
-
-    // Destroy any previous instance
-    hlsInstanceRef.current?.destroy();
-
-    if (Hls.isSupported()) {
-        setupHlsJsPlayer(video, url);
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        setupNativePlayer(video, url);
-    } else {
-        dispatch({ type: 'ERROR', payload: 'HLS playback is not supported in this browser.' });
+    if (!url || !video) {
+      if (!url) dispatch({ type: 'ERROR', payload: 'No stream URL provided.' });
+      return;
     }
 
-    // --- State Sync Event Listeners ---
+    const initializePlayer = () => {
+      dispatch({ type: 'ATTEMPT_PLAY' });
+      if (Hls.isSupported()) {
+        setupHlsJsPlayer(video, url);
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        setupNativePlayer(video, url);
+      } else {
+        dispatch({ type: 'ERROR', payload: 'HLS playback is not supported in this browser.' });
+      }
+    };
+
+    const addEventListeners = () => {
+      video.addEventListener('play', handlePlay);
+      video.addEventListener('pause', handlePause);
+      video.addEventListener('volumechange', handleVolumeChange);
+    };
+
+    const removeEventListeners = () => {
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+      video.removeEventListener('volumechange', handleVolumeChange);
+    };
+    
+    const cleanupPlayer = () => {
+      removeEventListeners();
+      hlsInstanceRef.current?.destroy();
+      dispatch({ type: 'RESET' });
+    };
+
+    // Event handlers to sync React state with video element state
     const handlePlay = () => dispatch({ type: 'PLAYBACK_SUCCESS' });
     const handlePause = () => dispatch({ type: 'PLAYBACK_FAILED' });
     const handleVolumeChange = () => dispatch({ type: 'SET_MUTED', payload: video.muted });
 
-    video.addEventListener('play', handlePlay);
-    video.addEventListener('pause', handlePause);
-    video.addEventListener('volumechange', handleVolumeChange);
+    initializePlayer();
+    addEventListeners();
 
-    // Cleanup function
-    return () => {
-      video.removeEventListener('play', handlePlay);
-      video.removeEventListener('pause',handlePause);
-      video.removeEventListener('volumechange', handleVolumeChange);
-      hlsInstanceRef.current?.destroy();
-      dispatch({ type: 'RESET' });
-    };
+    return cleanupPlayer;
   }, [url, setupHlsJsPlayer, setupNativePlayer]);
 
-  // --- Player Actions ---
+  // --- Exposed Player Actions ---
   const togglePlayPause = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;

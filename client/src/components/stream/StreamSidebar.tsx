@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -21,7 +21,7 @@ import { Participant } from '@relay-app/shared';
 // --- Helper Functions & Child Components ---
 
 /**
- * @description A reusable component for an information field with a copy button.
+ * A reusable component for an information field with a copy button.
  */
 const CopyableInfoField = ({ label, value }: { label: string; value: string }) => {
   const [copied, setCopied] = useState(false);
@@ -50,7 +50,7 @@ const CopyableInfoField = ({ label, value }: { label: string; value: string }) =
 };
 
 /**
- * @description Renders a single participant in the list.
+ * Renders a single participant in the list.
  */
 const ParticipantItem = ({ p, selfId, userRole }: { p: Participant; selfId?: string; userRole: 'host' | 'guest' | 'viewer' }) => {
   const getParticipantName = () => {
@@ -75,7 +75,7 @@ const ParticipantItem = ({ p, selfId, userRole }: { p: Participant; selfId?: str
 };
 
 /**
- * @description Displays the list of all participants in the stream.
+ * Displays the list of all participants in the stream.
  */
 const ParticipantList = ({ participants, selfId, userRole }: Pick<StreamSidebarProps, 'participants' | 'selfId' | 'userRole'>) => (
   <Card>
@@ -96,27 +96,37 @@ const ParticipantList = ({ participants, selfId, userRole }: Pick<StreamSidebarP
 );
 
 /**
- * @description Displays information and actions related to HLS broadcasting.
+ * Displays the link for viewers to watch the stream.
  */
-const BroadcastCard = ({ hlsUrl, userRole }: Pick<StreamSidebarProps, 'hlsUrl' | 'userRole'>) => {
-  if (userRole !== 'host' && !hlsUrl) return null; // Hide card if not host and HLS is off
+const ViewerLinkCard = ({ roomCode }: Pick<StreamSidebarProps, 'roomCode'>) => {
+  const [origin, setOrigin] = useState('');
 
-  const watchUrl = hlsUrl ? `${window.location.origin}/watch/${hlsUrl.split('/').slice(-2)[0]}` : '';
+  // Get the window.location.origin on the client side
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+
+  const watchUrl = origin ? `${origin}/watch/${roomCode}` : '';
 
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-lg flex items-center gap-2">
           <Cast className="w-5 h-5 text-primary" />
-          Broadcast
+          Viewer Link
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {hlsUrl && watchUrl ? (
-          <CopyableInfoField label="Viewer Watch URL" value={watchUrl} />
+        { watchUrl ? (
+          <>
+            <p className="text-sm text-muted-foreground mb-3">
+              Give your viewers this link to watch the stream.
+            </p>
+            <CopyableInfoField label="Viewer URL" value={watchUrl} />
+          </>
         ) : (
           <p className="text-sm text-muted-foreground text-center py-2">
-            {userRole === 'host' ? "HLS broadcast is off" : "Broadcast not active"}
+            HLS broadcast is off.
           </p>
         )}
       </CardContent>
@@ -125,7 +135,7 @@ const BroadcastCard = ({ hlsUrl, userRole }: Pick<StreamSidebarProps, 'hlsUrl' |
 };
 
 /**
- * @description Displays general session information like room code and user role.
+ * Displays general session information like room code and user role.
  */
 const SessionInfoCard = ({ roomCode, userRole }: Pick<StreamSidebarProps, 'roomCode' | 'userRole'>) => (
   <Card>
@@ -151,15 +161,15 @@ const SessionInfoCard = ({ roomCode, userRole }: Pick<StreamSidebarProps, 'roomC
 // --- Main Sidebar Component ---
 
 /**
- * @description The main sidebar for the streaming interface, displaying participants,
- * broadcast info, and session details.
+ * The main sidebar for the streaming interface.
+ * Note: You will need to update `StreamSidebarProps` to include `isHlsEnabled`.
  */
 export function StreamSidebar(props: StreamSidebarProps) {
   return (
     <aside className="hidden lg:block w-80 border-l bg-background/95 backdrop-blur-sm">
       <div className="h-full overflow-y-auto p-4 space-y-6">
         <ParticipantList {...props} />
-        <BroadcastCard {...props} />
+        <ViewerLinkCard {...props} />
         <SessionInfoCard {...props} />
       </div>
     </aside>

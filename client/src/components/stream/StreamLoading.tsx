@@ -2,7 +2,6 @@
  * @file Renders a loading indicator for the stream page.
  * @author Your Name
  */
-"use client";
 
 import AppLayout from "@/components/layout/AppLayout";
 import { Loader2 } from "lucide-react";

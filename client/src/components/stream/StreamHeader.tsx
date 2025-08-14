@@ -6,11 +6,16 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Video, Wifi, LogOut, Users, Copy, CheckCircle } from 'lucide-react';
 import { StreamHeaderProps } from '@/lib/types/ui-types';
+import { cn } from '@/lib/utils';
+
+// --- Style Constants for Readability ---
+const hlsButtonStyles = "text-xs transition-all cursor-pointer";
+const leaveButtonStyles = "bg-white/5 border-white/10 hover:bg-white/10 text-xs cursor-pointer";
 
 // --- Child Components ---
 
 /**
- * @description Displays the main brand logo and title in the header.
+ * Displays the main brand logo and stream title.
  */
 const BrandLogo = ({ isStreaming, userRole }: Pick<StreamHeaderProps, 'isStreaming' | 'userRole'>) => (
   <Link href="/" className="flex items-center gap-2 md:gap-3 group">
@@ -26,34 +31,29 @@ const BrandLogo = ({ isStreaming, userRole }: Pick<StreamHeaderProps, 'isStreami
       )}
     </div>
     <div className="hidden sm:block">
-      <div className="font-serif text-lg md:text-xl font-bold tracking-tight">Live Podcast</div>
+      <div className="font-serif text-lg md:text-xl font-bold tracking-tight">Live Stream</div>
       <p className="text-xs text-muted-foreground hidden md:block">
-        {userRole === 'host' ? 'Host Dashboard' : 'Guest View'}
+        {userRole === 'host' ? 'Host Controls' : 'Guest Mode'}
       </p>
     </div>
   </Link>
 );
 
 /**
- * @description Displays the room information, including code, copy button, and participant count.
+ * Displays the room code, copy button, and participant count.
  */
 const RoomInfo = ({ roomCode, participantCount }: Pick<StreamHeaderProps, 'roomCode' | 'participantCount'>) => {
   const [copied, setCopied] = useState(false);
 
-  const copyRoomCode = async () => {
-    const textToCopy = roomCode;
-    if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
-      try {
-        await navigator.clipboard.writeText(textToCopy);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      } catch (err) {
-        console.error('Clipboard API: Oops, unable to copy', err);
-      }
-    } else {
-      // Fallback for older browsers or restricted environments
-      const textArea = document.createElement('textarea');
-      textArea.value = textToCopy;
+  const copyRoomCode = () => {
+    navigator.clipboard.writeText(roomCode).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(err => {
+      console.error('Failed to copy room code: ', err);
+      // Fallback for older browsers
+      const textArea = document.createElement("textarea");
+      textArea.value = roomCode;
       document.body.appendChild(textArea);
       textArea.focus();
       textArea.select();
@@ -62,21 +62,24 @@ const RoomInfo = ({ roomCode, participantCount }: Pick<StreamHeaderProps, 'roomC
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       } catch (err) {
-        console.error('Fallback: Oops, unable to copy', err);
+        console.error('Fallback copy failed: ', err);
       }
       document.body.removeChild(textArea);
-    }
+    });
   };
   
   return (
     <div className="flex items-center gap-3">
-      <div className="hidden md:flex items-center gap-1 rounded-md border bg-secondary/50 p-1 pr-2">
-        <Badge variant="outline" className="font-mono border-none shadow-none">
+      <div className="hidden md:flex items-center gap-2 rounded-lg border bg-background/70 p-1.5 backdrop-blur-sm">
+        <Badge variant="secondary" className="font-mono text-xs tracking-wider border-none shadow-none bg-transparent">
           {roomCode}
         </Badge>
-        <Button variant="ghost" size="icon" onClick={copyRoomCode} className="h-6 w-6">
+        <Button variant="ghost" size="icon" onClick={copyRoomCode} className="h-7 w-7 rounded-md">
           <span className="sr-only">Copy room code</span>
-          {copied ? <CheckCircle className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+          <div className="relative h-4 w-4">
+            <CheckCircle className={cn("absolute transition-all duration-300 text-green-500", copied ? "scale-100 opacity-100" : "scale-0 opacity-0")} />
+            <Copy className={cn("absolute transition-all duration-300", copied ? "scale-0 opacity-0" : "scale-100 opacity-100")} />
+          </div>
         </Button>
       </div>
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -88,7 +91,7 @@ const RoomInfo = ({ roomCode, participantCount }: Pick<StreamHeaderProps, 'roomC
 };
 
 /**
- * @description Displays the main action buttons for the header.
+ * Displays the main action buttons (HLS toggle, Leave).
  */
 const HeaderActions = ({
   userRole,
@@ -103,38 +106,42 @@ const HeaderActions = ({
         onClick={onToggleHLS}
         variant={isHlsEnabled ? "default" : "outline"}
         size="sm"
-        className="text-xs"
+        className={cn(hlsButtonStyles, isHlsEnabled && "shadow-md shadow-primary/30")}
       >
         <Wifi className="w-4 h-4 mr-1" />
         <span className="hidden sm:inline">HLS {isHlsEnabled ? "ON" : "OFF"}</span>
       </Button>
     )}
-    <Button
-      onClick={onLeaveRoom}
-      variant="outline"
-      size="sm"
-      className="bg-white/5 border-white/10 hover:bg-white/10 text-xs"
-    >
+    <Button onClick={onLeaveRoom} variant="outline" size="sm" className={leaveButtonStyles}>
       <LogOut className="w-4 h-4 mr-1 md:mr-2" />
       <span className="hidden sm:inline">Leave</span>
     </Button>
   </div>
 );
 
-
 // --- Main Header Component ---
 
-/**
- * @description The main header for the streaming interface, displaying branding,
- * room information, and primary user actions.
- */
-export function StreamHeader(props: StreamHeaderProps) {
+export function StreamHeader({
+  roomCode,
+  userRole,
+  participantCount,
+  isStreaming,
+  isHlsEnabled,
+  onLeaveRoom,
+  onToggleHLS,
+}: StreamHeaderProps) {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/20 bg-background/95 backdrop-blur">
       <div className="flex h-14 md:h-16 items-center justify-between px-4 md:px-6">
-        <BrandLogo {...props} />
-        <RoomInfo {...props} />
-        <HeaderActions {...props} />
+        <BrandLogo isStreaming={isStreaming} userRole={userRole} />
+        <RoomInfo roomCode={roomCode} participantCount={participantCount} />
+        <HeaderActions
+          userRole={userRole}
+          isStreaming={isStreaming}
+          isHlsEnabled={isHlsEnabled}
+          onToggleHLS={onToggleHLS}
+          onLeaveRoom={onLeaveRoom}
+        />
       </div>
     </header>
   );

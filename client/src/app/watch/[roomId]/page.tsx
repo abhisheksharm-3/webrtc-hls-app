@@ -10,9 +10,9 @@ import { useAppStore } from "@/store/app-store";
 import AppLayout from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { WatchLoader } from "@/lib/hls-utils/WatchLoader";
-import { Player } from "@/lib/hls-utils/Player";
-import { ViewerInfoPanel } from "@/lib/hls-utils/ViewerInfoPanel";
+import { WatchLoader } from "@/components/watch/WatchLoader";
+import { Player } from "@/components/watch/Player";
+import { ViewerInfoPanel } from "@/components/watch/ViewerInfoPanel";
 
 // Icons
 import { ArrowLeft, Wifi } from "lucide-react";

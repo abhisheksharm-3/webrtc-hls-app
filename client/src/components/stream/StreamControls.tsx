@@ -4,42 +4,80 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { StreamControlProps } from '@/lib/types/ui-types';
 import { Mic, MicOff, Video, VideoOff, LogOut, Radio } from 'lucide-react';
+import React from 'react';
 
-// --- Child Components ---
+// --- Reusable Sub-Components ---
 
 /**
- * @description A reusable button for toggling media devices (camera, microphone).
- * It encapsulates the button, icon, tooltip, and state-based styling.
+ * A reusable button for toggling media devices.
  */
 const MediaToggleButton = ({
   isActive,
   onToggle,
   IconOn,
   IconOff,
-  tooltipOn,
-  tooltipOff,
+  tooltip,
 }: {
   isActive: boolean;
   onToggle: () => void;
   IconOn: React.ElementType;
   IconOff: React.ElementType;
-  tooltipOn: string;
-  tooltipOff: string;
+  tooltip: string;
 }) => (
   <Tooltip>
     <TooltipTrigger asChild>
       <Button
         onClick={onToggle}
-        size="icon" // Use "icon" size for a square button
+        size="icon"
         variant={isActive ? "secondary" : "destructive"}
         className="h-10 w-10 rounded-lg"
+        aria-label={isActive ? `Disable ${tooltip}` : `Enable ${tooltip}`}
       >
         {isActive ? <IconOn className="w-5 h-5" /> : <IconOff className="w-5 h-5" />}
-        <span className="sr-only">{isActive ? tooltipOn : tooltipOff}</span>
       </Button>
     </TooltipTrigger>
     <TooltipContent>
-      <p>{isActive ? tooltipOn : tooltipOff}</p>
+      <p>{isActive ? `Disable ${tooltip}` : `Enable ${tooltip}`}</p>
+    </TooltipContent>
+  </Tooltip>
+);
+
+/**
+ * A visual indicator showing the stream's current status (Live or Ready).
+ */
+const LiveIndicator = ({ isStreaming }: { isStreaming: boolean }) => {
+  if (isStreaming) {
+    return (
+      <div className="hidden sm:flex items-center gap-2 px-3 py-1 text-sm font-semibold text-white bg-red-600 rounded-full animate-pulse">
+        <Radio className="w-3 h-3" />
+        LIVE
+      </div>
+    );
+  }
+  return (
+    <div className="hidden sm:flex items-center px-3 py-1 text-sm font-semibold text-muted-foreground bg-secondary rounded-full">
+      Ready to Stream
+    </div>
+  );
+};
+
+/**
+ * A styled button for leaving the stream room.
+ */
+const LeaveButton = ({ onLeaveRoom }: { onLeaveRoom: () => void }) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <Button
+        onClick={onLeaveRoom}
+        variant="destructive"
+        className="h-10 px-4 rounded-lg"
+      >
+        <LogOut className="w-4 h-4 sm:mr-2" />
+        <span className="hidden sm:inline">Leave</span>
+      </Button>
+    </TooltipTrigger>
+    <TooltipContent>
+      <p>Leave the stream</p>
     </TooltipContent>
   </Tooltip>
 );
@@ -48,8 +86,7 @@ const MediaToggleButton = ({
 // --- Main Component ---
 
 /**
- * @description A component that displays the primary controls for a stream, such as
- * toggling media and leaving the room.
+ * A component that displays the primary controls for a stream.
  */
 export function StreamControls({
   mediaDeviceStatus,
@@ -58,8 +95,7 @@ export function StreamControls({
   userRole,
   isStreaming
 }: StreamControlProps) {
-  // The host can prepare their media before starting, so we show controls even if !isStreaming for the host.
-  // Guests will only see controls once the stream is live.
+  // Guests only see controls once the stream is live.
   if (userRole === 'guest' && !isStreaming) {
     return null;
   }
@@ -67,56 +103,25 @@ export function StreamControls({
   return (
     <div className="border-t bg-background/95 backdrop-blur-sm">
       <div className="flex items-center justify-center sm:justify-between px-4 py-3">
-        {/* Live indicator (shown on larger screens) */}
-        <div className="hidden sm:flex items-center gap-3">
-          {isStreaming ? (
-            <div className="inline-flex items-center px-3 py-1 text-sm font-semibold text-white bg-red-600 rounded-full animate-pulse">
-              <Radio className="w-3 h-3 mr-2" />
-              LIVE
-            </div>
-          ) : (
-             <div className="inline-flex items-center px-3 py-1 text-sm font-semibold text-muted-foreground bg-secondary rounded-full">
-              Ready to Stream
-            </div>
-          )}
-        </div>
+        <LiveIndicator isStreaming={isStreaming} />
 
-        {/* Controls */}
         <div className="flex items-center gap-2">
           <MediaToggleButton
             isActive={mediaDeviceStatus.video}
             onToggle={() => onToggleMedia("video")}
             IconOn={Video}
             IconOff={VideoOff}
-            tooltipOn="Turn off camera"
-            tooltipOff="Turn on camera"
+            tooltip="camera"
           />
           <MediaToggleButton
             isActive={mediaDeviceStatus.audio}
             onToggle={() => onToggleMedia("audio")}
             IconOn={Mic}
             IconOff={MicOff}
-            tooltipOn="Mute microphone"
-            tooltipOff="Unmute microphone"
+            tooltip="microphone"
           />
-
-          <div className="w-px h-6 bg-border mx-2"></div>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                onClick={onLeaveRoom}
-                variant="destructive"
-                className="h-10 px-4 rounded-lg"
-              >
-                <LogOut className="w-4 h-4 sm:mr-2" />
-                <span className="hidden sm:inline">Leave</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Leave the stream</p>
-            </TooltipContent>
-          </Tooltip>
+          <div className="w-px h-6 bg-border mx-2" />
+          <LeaveButton onLeaveRoom={onLeaveRoom} />
         </div>
       </div>
     </div>

@@ -1,8 +1,6 @@
 /**
  * @file Renders an error message for the stream page.
- * @author Your Name
  */
-"use client";
 
 import AppLayout from "@/components/layout/AppLayout";
 import { Card } from "@/components/ui/card";
