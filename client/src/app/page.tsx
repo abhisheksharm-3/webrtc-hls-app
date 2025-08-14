@@ -12,7 +12,7 @@ import { CTASection } from "@/components/landing/CTASection";
  */
 const HomePage: React.FC = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/5">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/5 overflow-x-hidden">
       <Header />
       <main>
         <HeroSection />

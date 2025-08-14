@@ -9,8 +9,8 @@ import { ArrowRight } from "lucide-react";
 const inputStyles =
   "h-14 flex-1 rounded-r-none border-r-0 bg-white/5 text-base transition focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-0 font-mono";
 const joinButtonStyles =
-  "group h-14 rounded-l-none px-6 text-base shadow-[0_0_15px_theme(colors.primary/30%)] transition-all duration-300 ease-in-out hover:shadow-[0_0_30px_theme(colors.primary/50%)]";
-const watchLinkStyles = "text-sm text-muted-foreground hover:text-primary";
+  "group h-14 rounded-l-none px-6 text-base shadow-[0_0_15px_theme(colors.primary/30%)] transition-all duration-300 cursor-pointer ease-in-out hover:shadow-[0_0_30px_theme(colors.primary/50%)]";
+const watchLinkStyles = "text-sm text-muted-foreground hover:text-primary cursor-pointer";
 
 /**
  * @description A section on the landing page for users to quickly join or watch a stream using a room code.

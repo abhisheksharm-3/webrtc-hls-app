@@ -93,15 +93,13 @@ const BrandSection = () => (
       <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80 shadow-lg transition-transform duration-300 group-hover:scale-105">
         <Video className="h-6 w-6 text-primary-foreground" />
       </div>
-      <Link href="/" className="flex items-center gap-3 group">
-        <div className="relative">
-          <img
-            src="/logo.png"
-            alt="Relay Logo"
-            className="h-9 w-auto transition-transform duration-300 group-hover:scale-105"
-          />
-        </div>
-      </Link>
+      <div className="relative">
+        <img
+          src="/logo.png"
+          alt="Relay Logo"
+          className="h-9 w-auto transition-transform duration-300 group-hover:scale-105"
+        />
+      </div>
     </Link>
     <p className="leading-relaxed text-muted-foreground">
       Production-grade streaming platform for creators, businesses, and
@@ -141,7 +139,7 @@ export function Footer() {
 
         <div className="flex flex-col-reverse items-center justify-between gap-6 md:flex-row">
           <p className="font-mono text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} Streamify. All Rights Reserved.
+            &copy; {new Date().getFullYear()} Relay. All Rights Reserved.
           </p>
           <div className="flex items-center gap-6 text-sm text-muted-foreground">
             <Link

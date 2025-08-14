@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Menu, X, ArrowRight, Zap, Globe, Users } from "lucide-react";
+import { Menu, X, ArrowRight, Zap, Globe } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { ModeToggle } from "../mode-toggle";
@@ -22,12 +22,6 @@ const navLinks: NavLinkItem[] = [
     label: "How it Works",
     icon: Globe,
     description: "Simple setup process",
-  },
-  {
-    href: "/watch",
-    label: "Watch Streams",
-    icon: Users,
-    description: "Join live streams",
   },
 ];
 
