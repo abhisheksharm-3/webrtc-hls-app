@@ -40,7 +40,7 @@ const VideoTile = React.memo(({
   isLocal?: boolean;
 }) => {
   return (
-    <Card className="relative w-full overflow-hidden bg-black border-white/10 shadow-lg aspect-video">
+    <Card className="relative w-full overflow-hidden bg-black border-white/10 shadow-lg aspect-video py-0">
       <video
         ref={videoRef}
         autoPlay={isLocal} // Enable autoplay for local video only

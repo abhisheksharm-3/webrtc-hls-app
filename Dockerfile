@@ -3,11 +3,11 @@
 ###############################################
 # Build stage for shared package
 ###############################################
-FROM node:18-alpine AS shared-builder
+FROM node:20-alpine AS shared-builder
 WORKDIR /app/shared
 
 # Install build tools needed by dependencies that compile native modules
-RUN apk add --no-cache python3 make g++
+RUN apk add --no-cache python3 py3-pip make g++
 
 COPY shared/package*.json ./
 # Install full deps to build TypeScript
@@ -16,11 +16,11 @@ COPY shared/ .
 RUN npm run build
 
 # Build stage for server
-FROM node:18-alpine AS server-builder
+FROM node:20-alpine AS server-builder
 WORKDIR /app
 
 # Install system dependencies for mediasoup
-RUN apk add --no-cache python3 make g++
+RUN apk add --no-cache python3 py3-pip make g++
 
 # Copy shared module first
 COPY --from=shared-builder /app/shared ./shared
@@ -39,7 +39,7 @@ RUN npx prisma generate
 RUN npm run build
 
 # Build stage for client
-FROM node:18-alpine AS client-builder
+FROM node:20-alpine AS client-builder
 WORKDIR /app
 
 # Copy shared module
@@ -62,14 +62,16 @@ ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
 ENV NEXT_PUBLIC_HLS_BASE_URL=${NEXT_PUBLIC_HLS_BASE_URL}
 ENV NEXT_PUBLIC_ICE_SERVERS=${NEXT_PUBLIC_ICE_SERVERS}
 
+# Build and export static files
 RUN npm run build
 
 # Production stage
-FROM node:18-alpine AS production
+FROM node:20-alpine AS production
 
 # Install system dependencies for mediasoup and FFmpeg
 RUN apk add --no-cache \
     python3 \
+    py3-pip \
     make \
     g++ \
     ffmpeg \
@@ -88,12 +90,10 @@ COPY --from=server-builder /app/server/node_modules ./server/node_modules
 COPY --from=server-builder /app/server/package*.json ./server/
 COPY --from=server-builder /app/server/prisma ./server/prisma
 
-# Copy built client
-COPY --from=client-builder /app/client/.next ./client/.next
+# Copy built client (standalone mode)
+COPY --from=client-builder /app/client/.next/standalone/client ./client
+COPY --from=client-builder /app/client/.next/static ./client/.next/static
 COPY --from=client-builder /app/client/public ./client/public
-COPY --from=client-builder /app/client/package*.json ./client/
-COPY --from=client-builder /app/client/next.config.ts ./client/
-COPY --from=client-builder /app/client/node_modules ./client/node_modules
 
 # Copy root package.json for reference
 COPY package*.json ./
@@ -113,7 +113,7 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh && \
 USER nextjs
 
 # Expose ports
-EXPOSE 3000 3001
+EXPOSE 3001
 EXPOSE 40000-49999/udp
 
 # Health check

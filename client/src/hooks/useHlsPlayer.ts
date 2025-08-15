@@ -88,12 +88,34 @@ export const useHlsPlayer = (url: string | null) => {
       });
     
     const hls = new Hls({
-      // More resilient configuration for production
-      maxBufferLength: 30,
-      maxMaxBufferLength: 600,
-      lowLatencyMode: true,
+      // Optimized configuration for ultra-low latency
+      maxBufferLength: 3,              // Reduced from 30 - minimum buffer (3 seconds)
+      maxMaxBufferLength: 6,           // Reduced from 600 - max buffer (6 seconds)
+      lowLatencyMode: true,            // Enable LL-HLS features
       enableWorker: true,
-      debug: true, // Enable debug logging
+      debug: true,
+      
+      // Additional low-latency optimizations
+      liveSyncDurationCount: 1,        // Number of segments to sync (1 = most aggressive)
+      liveMaxLatencyDurationCount: 2,  // Max latency in segments (2 segments)
+      liveDurationInfinity: false,     // Don't allow infinite buffering
+      
+      // Faster segment loading
+      manifestLoadingTimeOut: 2000,    // 2 seconds timeout for manifest
+      manifestLoadingMaxRetry: 2,      // Fewer retries for faster failover
+      levelLoadingTimeOut: 2000,       // 2 seconds timeout for segments
+      levelLoadingMaxRetry: 2,         // Fewer retries
+      
+      // Immediate playback
+      startPosition: -1,               // Start at live edge
+      backBufferLength: 3,             // Keep minimal back buffer (3 seconds)
+      
+      // Aggressive fragment loading
+      fragLoadingTimeOut: 2000,        // 2 seconds timeout for fragments
+      fragLoadingMaxRetry: 2,          // Fewer retries
+      
+      // Optimize for live streaming
+      maxLiveSyncPlaybackRate: 1.1,    // Slightly faster playback to catch up
     });
     hlsInstanceRef.current = hls;
 

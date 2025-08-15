@@ -33,6 +33,17 @@ interface HlsPorts {
 }
 
 /**
+ * @interface StreamPorts
+ * @description Defines ports for individual streams to support multiple participants.
+ */
+interface StreamPorts {
+  rtpPort: number;
+  rtcpPort: number;
+  kind: 'video' | 'audio';
+  streamIndex: number;
+}
+
+/**
  * @interface HlsData
  * @description Represents the Mediasoup and filesystem resources associated with an HLS stream.
  */
@@ -64,7 +75,7 @@ interface TransportConsumerPair {
 export async function startRecording(
   room: LiveRoom,
 ): Promise<{ playlistUrl: string }> {
-  if (room.hlsProcess) {
+  if (room.hlsProcess && !room.hlsProcess.killed) {
     throw new Error(`HLS recording is already in progress for room ${room.id}`);
   }
 
@@ -76,49 +87,54 @@ export async function startRecording(
     const hlsOutputDir = path.join(absoluteHlsPath, room.id);
     await fs.promises.mkdir(hlsOutputDir, { recursive: true });
 
-    // 2. Select the first available audio and video producers
-    const { videoProducer, audioProducer } = selectProducers(room);
+    // 2. Select all available audio and video producers for multi-stream support
+    const { videoProducers, audioProducers } = selectProducers(room);
     
     // Check if we have at least one producer (audio-only streams are acceptable)
-    if (!videoProducer && !audioProducer) {
+    if (videoProducers.length === 0 && audioProducers.length === 0) {
       throw new Error(`No active producers found in room ${room.id}. Cannot start HLS stream.`);
     }
     
-    // Filter out undefined producers for the consumer creation
-    const availableProducers = [videoProducer, audioProducer].filter(Boolean) as mediasoupTypes.Producer[];
+    // Combine all producers for consumer creation
+    const availableProducers = [...videoProducers, ...audioProducers];
     
     if (availableProducers.length === 0) {
       throw new Error(`No valid producers available for HLS in room ${room.id}`);
     }
     
-    logger.info(`🎬 [HLS] Starting HLS with ${availableProducers.length} producer(s): ${availableProducers.map(p => p.kind).join(', ')}`);
+    logger.info(`🎬 [HLS] Starting HLS with ${availableProducers.length} producer(s): ${availableProducers.map(p => `${p.kind}(${p.id.substring(0,8)})`).join(', ')}`);
+    logger.info(`🎬 [HLS] Room ${room.id} has ${room.participants.size} participants with producers`);
 
-    // 3. Find available network ports for RTP/RTCP
-    const hlsPorts = await findAvailablePorts();
-    logger.info(`[HLS] Found available ports for room ${room.id}: ${JSON.stringify(hlsPorts)}`);
+    // 3. Find available network ports for each stream
+    const streamPorts = await findAvailablePortsForStreams(availableProducers);
+    logger.info(`[HLS] Found available ports for room ${room.id}:`, streamPorts.map(p => `${p.kind}${p.streamIndex}:${p.rtpPort}/${p.rtcpPort}`).join(', '));
 
-    // 4. Create Mediasoup transports and consumers
+    // 4. Create individual Mediasoup transports and consumers for each stream
     const { transports, consumers, pairs } =
-      await createRtpTransportsAndConsumers(
+      await createMultiStreamTransportsAndConsumers(
         room.router,
         availableProducers,
-        hlsPorts,
+        streamPorts,
       );
-    logger.info(`[HLS] Created ${transports.length} transports and ${consumers.length} consumers.`);
+    logger.info(`[HLS] Created ${transports.length} transports and ${consumers.length} consumers for ${availableProducers.length} streams.`);
 
-    // 5. Generate and write the SDP file for FFmpeg
+    // 5. Generate and write the multi-stream SDP file for FFmpeg
     const sdpPath = path.join(hlsOutputDir, "stream.sdp");
-    // FIX: Pass the hlsPorts object to generateSdp
-    const sdpString = generateSdp(pairs, hlsPorts);
+    const sdpString = generateMultiStreamSdp(pairs, streamPorts);
     await fs.promises.writeFile(sdpPath, sdpString);
-    logger.info(`[HLS] Generated SDP file at ${sdpPath}`);
+    logger.info(`[HLS] Generated multi-stream SDP file at ${sdpPath}`);
 
     // 6. Resume consumers to start data flow
     await Promise.all(consumers.map((c) => c.resume()));
     logger.info("[HLS] Resumed all consumers.");
 
-    // 7. Spawn the FFmpeg process
-    const ffmpegProcess = runFfmpeg(sdpPath, hlsOutputDir, room.id);
+    // 7. Spawn the FFmpeg process with stream counts for dynamic mixing
+    const streamCounts = {
+      video: videoProducers.length,
+      audio: audioProducers.length
+    };
+    logger.info(`🎬 [HLS] Stream counts for FFmpeg: video=${streamCounts.video}, audio=${streamCounts.audio}`);
+    const ffmpegProcess = runFfmpeg(sdpPath, hlsOutputDir, room.id, streamCounts);
     room.hlsProcess = ffmpegProcess;
     logger.info(`[HLS] Spawned FFmpeg process with PID ${ffmpegProcess.pid} for room ${room.id}.`);
 
@@ -153,6 +169,9 @@ export function stopRecording(room: LiveRoom): Promise<void> {
     logger.info(`[HLS] Stopping HLS recording for room ${room.id}...`);
     const hlsData = room.appData.hls as HlsData | undefined;
     const hlsProcess = room.hlsProcess;
+    
+    // Clear the process reference immediately to allow new recordings
+    room.hlsProcess = undefined;
 
     /**
      * A self-contained cleanup function to close resources and delete files.
@@ -202,7 +221,6 @@ export function stopRecording(room: LiveRoom): Promise<void> {
       // Set a listener to perform cleanup *after* the process confirms it has closed.
       hlsProcess.on('close', () => {
         logger.info(`[HLS] FFmpeg process ${hlsProcess.pid} has exited.`);
-        room.hlsProcess = undefined;
         cleanupResources();
       });
 
@@ -245,51 +263,87 @@ async function ensureHlsDirectory(): Promise<string> {
 }
 
 /**
- * Selects the first active video and audio producers from the room.
+ * Selects all active video and audio producers from the room for multi-stream HLS.
+ * This enables mixing multiple participant streams into a single HLS output.
  * @private
  * @param {LiveRoom} room - The room to select producers from.
- * @returns {{ videoProducer: mediasoupTypes.Producer; audioProducer: mediasoupTypes.Producer }} The selected producers.
- * @throws If either a video or audio producer is not found.
+ * @returns {{ videoProducers: mediasoupTypes.Producer[]; audioProducers: mediasoupTypes.Producer[] }} All available producers.
  */
 function selectProducers(room: LiveRoom): {
-  videoProducer?: mediasoupTypes.Producer;
-  audioProducer?: mediasoupTypes.Producer;
+  videoProducers: mediasoupTypes.Producer[];
+  audioProducers: mediasoupTypes.Producer[];
 } {
   const allProducers = Array.from(room.participants.values()).flatMap((p) =>
     Array.from((p as any)["producers"].values() as mediasoupTypes.Producer[]),
   ).filter((p) => !p.closed && !p.paused);
 
-  const videoProducer = allProducers.find((p) => p.kind === "video");
-  const audioProducer = allProducers.find((p) => p.kind === "audio");
+  const videoProducers = allProducers.filter((p) => p.kind === "video");
+  const audioProducers = allProducers.filter((p) => p.kind === "audio");
 
   logger.info(`🎬 [HLS] Available producers: ${allProducers.map(p => `${p.kind}(${p.id.substring(0,8)})`).join(', ')}`);
-  logger.info(`🎬 [HLS] Selected producers: Video=${videoProducer ? videoProducer.id.substring(0,8) : 'NONE'}, Audio=${audioProducer ? audioProducer.id.substring(0,8) : 'NONE'}`);
+  logger.info(`🎬 [HLS] Selected producers: Video=[${videoProducers.map(p => p.id.substring(0,8)).join(', ')}], Audio=[${audioProducers.map(p => p.id.substring(0,8)).join(', ')}]`);
 
   // Log missing producer types for debugging
   const missingTypes = [];
-  if (!videoProducer) missingTypes.push('video');
-  if (!audioProducer) missingTypes.push('audio');
+  if (videoProducers.length === 0) missingTypes.push('video');
+  if (audioProducers.length === 0) missingTypes.push('audio');
   
   if (missingTypes.length > 0) {
     logger.warn(`🎬 [HLS] Missing producer types: ${missingTypes.join(', ')}. Available: ${allProducers.map(p => p.kind).join(', ')}`);
   }
 
-  return { videoProducer, audioProducer };
+  return { videoProducers, audioProducers };
 }
 
 /**
- * Finds a set of four available, sequential UDP ports for RTP and RTCP.
+ * Finds available UDP ports for RTP and RTCP for multiple streams.
  * @private
- * @returns {Promise<HlsPorts>} A promise resolving to an object of available ports.
+ * @param {mediasoupTypes.Producer[]} producers - All producers that need ports
+ * @returns {Promise<StreamPorts[]>} A promise resolving to an array of port configurations for each stream.
  */
-async function findAvailablePorts(): Promise<HlsPorts> {
+async function findAvailablePortsForStreams(producers: mediasoupTypes.Producer[]): Promise<StreamPorts[]> {
   // Use a high port range to avoid conflicts with common services.
   portfinder.setBasePort(40000);
 
   const findPort = () => portfinder.getPortPromise();
 
-  // Find four distinct ports. portfinder prevents reuse within the same process.
-  const ports = await Promise.all([findPort(), findPort(), findPort(), findPort()]);
+  // Each producer needs 2 ports (RTP + RTCP)
+  const portCount = producers.length * 2;
+  const ports = await Promise.all(Array(portCount).fill(null).map(() => findPort()));
+
+  const streamPorts: StreamPorts[] = [];
+  let videoIndex = 0;
+  let audioIndex = 0;
+
+  for (let i = 0; i < producers.length; i++) {
+    const producer = producers[i];
+    const rtpPort = ports[i * 2];
+    const rtcpPort = ports[i * 2 + 1];
+    
+    streamPorts.push({
+      rtpPort,
+      rtcpPort,
+      kind: producer.kind as 'video' | 'audio',
+      streamIndex: producer.kind === 'video' ? videoIndex++ : audioIndex++
+    });
+  }
+
+  return streamPorts;
+}
+
+/**
+ * Legacy function for backward compatibility - now delegates to new multi-stream function
+ * @deprecated Use findAvailablePortsForStreams instead
+ */
+async function findAvailablePorts(streamCount: number = 1): Promise<HlsPorts> {
+  // Use a high port range to avoid conflicts with common services.
+  portfinder.setBasePort(40000);
+
+  const findPort = () => portfinder.getPortPromise();
+
+  // Find ports for multiple streams: each stream needs 2 ports (RTP + RTCP) for video and audio
+  const portCount = Math.max(4, streamCount * 4); // At least 4 ports, more if needed
+  const ports = await Promise.all(Array(portCount).fill(null).map(() => findPort()));
 
   return {
     videoRtpPort: ports[0],
@@ -300,8 +354,64 @@ async function findAvailablePorts(): Promise<HlsPorts> {
 }
 
 /**
- * Creates Mediasoup PlainTransports and Consumers for HLS ingestion.
+ * Creates individual Mediasoup PlainTransports and Consumers for each stream.
+ * This enables proper multi-stream support with separate ports for each participant.
  * @private
+ */
+async function createMultiStreamTransportsAndConsumers(
+  router: mediasoupTypes.Router,
+  producers: mediasoupTypes.Producer[],
+  streamPorts: StreamPorts[],
+): Promise<{
+  transports: mediasoupTypes.PlainTransport[];
+  consumers: mediasoupTypes.Consumer[];
+  pairs: TransportConsumerPair[];
+}> {
+  const transportOptions = {
+    listenIp: { ip: "127.0.0.1", announcedIp: undefined },
+    rtcpMux: false,
+    comedia: false,
+  };
+
+  const transports: mediasoupTypes.PlainTransport[] = [];
+  const consumers: mediasoupTypes.Consumer[] = [];
+  const pairs: TransportConsumerPair[] = [];
+
+  // Create a separate transport for each producer/stream
+  for (let i = 0; i < producers.length; i++) {
+    const producer = producers[i];
+    const portConfig = streamPorts[i];
+    
+    logger.info(`🎬 [Transport] Creating transport for ${producer.kind} stream ${portConfig.streamIndex} on ports ${portConfig.rtpPort}/${portConfig.rtcpPort}`);
+    
+    // Create individual transport for this stream
+    const transport = await router.createPlainTransport(transportOptions);
+    await transport.connect({ 
+      ip: "127.0.0.1", 
+      port: portConfig.rtpPort, 
+      rtcpPort: portConfig.rtcpPort 
+    });
+    
+    // Create consumer for this producer on its dedicated transport
+    const consumer = await transport.consume({
+      producerId: producer.id,
+      rtpCapabilities: router.rtpCapabilities,
+      paused: true, // Start paused, will be resumed after FFmpeg starts
+    });
+    
+    transports.push(transport);
+    consumers.push(consumer);
+    pairs.push({ transport, consumer });
+    
+    logger.info(`✅ [Transport] Created transport and consumer for ${producer.kind} stream ${portConfig.streamIndex}`);
+  }
+
+  return { transports, consumers, pairs };
+}
+
+/**
+ * Legacy function for backward compatibility
+ * @deprecated Use createMultiStreamTransportsAndConsumers instead
  */
 async function createRtpTransportsAndConsumers(
   router: mediasoupTypes.Router,
@@ -346,14 +456,59 @@ async function createRtpTransportsAndConsumers(
 }
 
 /**
- * Generates an SDP (Session Description Protocol) string for FFmpeg.
- * This file tells FFmpeg where to listen for the audio and video RTP streams.
+ * Generates an SDP (Session Description Protocol) string for multiple streams.
+ * This creates separate media sections for each stream with unique ports.
  * @private
  * @param {TransportConsumerPair[]} pairs - The transport-consumer pairs.
- * @param {HlsPorts} ports - The allocated ports for the HLS stream.
+ * @param {StreamPorts[]} streamPorts - The allocated ports for each stream.
  * @returns {string} The generated SDP content.
  */
-// FIX: Add HlsPorts to the function signature
+function generateMultiStreamSdp(pairs: TransportConsumerPair[], streamPorts: StreamPorts[]): string {
+  const sdpParts = [
+    "v=0",
+    "o=- 0 0 IN IP4 127.0.0.1",
+    "s=Mediasoup-HLS-MultiStream",
+    "c=IN IP4 127.0.0.1",
+    "t=0 0",
+  ];
+
+  // Generate a media section for each stream
+  for (let i = 0; i < pairs.length; i++) {
+    const { consumer } = pairs[i];
+    const portConfig = streamPorts[i];
+    const { rtpParameters, kind } = consumer;
+    const codec = rtpParameters.codecs[0];
+
+    logger.info(`🎬 [SDP] Generating ${kind} track ${portConfig.streamIndex}: codec=${codec.mimeType}, payloadType=${codec.payloadType}, ports=${portConfig.rtpPort}/${portConfig.rtcpPort}`);
+
+    sdpParts.push(
+      `m=${kind} ${portConfig.rtpPort} RTP/AVP ${codec.payloadType}`,
+      `a=rtcp:${portConfig.rtcpPort}`,
+      `a=sendrecv`,
+      `a=rtpmap:${codec.payloadType} ${codec.mimeType.split("/")[1]}/${codec.clockRate}${codec.channels ? `/${codec.channels}` : ""}`,
+    );
+    
+    // Add codec-specific format parameters
+    if (codec.parameters && Object.keys(codec.parameters).length > 0) {
+      for (const [key, value] of Object.entries(codec.parameters)) {
+        sdpParts.push(`a=fmtp:${codec.payloadType} ${key}=${value}`);
+      }
+    } else if (kind === 'video' && codec.mimeType.toLowerCase().includes('vp8')) {
+      // Add default VP8 parameters if none are provided
+      logger.warn(`🎬 [SDP] No codec parameters for VP8, adding default max-fr and max-fs`);
+      sdpParts.push(`a=fmtp:${codec.payloadType} max-fr=30;max-fs=3600`);
+    }
+  }
+  
+  const sdpContent = sdpParts.join("\r\n") + "\r\n";
+  logger.info(`🎬 [SDP] Generated multi-stream SDP content:\n${sdpContent}`);
+  return sdpContent;
+}
+
+/**
+ * Legacy SDP generation function for backward compatibility
+ * @deprecated Use generateMultiStreamSdp instead
+ */
 function generateSdp(pairs: TransportConsumerPair[], ports: HlsPorts): string {
   const sdpParts = [
     "v=0",
@@ -406,56 +561,62 @@ function generateSdp(pairs: TransportConsumerPair[], ports: HlsPorts): string {
  * @param {string} roomId - The ID of the room, used for logging context.
  * @returns {ChildProcess} The spawned FFmpeg child process instance.
  */
-function runFfmpeg(sdpPath: string, outputDir: string, roomId: string): ChildProcess {
+function runFfmpeg(sdpPath: string, outputDir: string, roomId: string, streamCount: { video: number; audio: number } = { video: 1, audio: 1 }): ChildProcess {
   const playlistPath = path.join(outputDir, "playlist.m3u8");
   const segmentPath = path.join(outputDir, "segment_%03d.ts");
 
+  // Generate the stream mixing configuration first
+  const mixingConfig = generateStreamMixingFilters(streamCount);
+  
   const args = [
     // Instruct FFmpeg to process the SDP file.
     "-protocol_whitelist", "file,udp,rtp",
     
-    // Increase probe size and analyze duration to better detect video streams
-    "-analyzeduration", "10000000",  // 10 seconds (increased)
-    "-probesize", "50000000",        // 50MB (increased significantly)
+    // Optimized for low latency - reduced probe/analyze times
+    "-analyzeduration", "2000000",   // 2 seconds (reduced from 10)
+    "-probesize", "10000000",        // 10MB (reduced from 50MB)
     
-    // Force FFmpeg to wait for keyframes and properly analyze streams
-    "-fflags", "+genpts+ignidx",
+    // Low-latency flags
+    "-fflags", "+genpts+ignidx+nobuffer",
     "-avoid_negative_ts", "make_zero",
+    "-max_delay", "500000",          // 500ms max delay
     
     "-i", sdpPath,
 
-    // Explicitly map both video and audio streams
-    "-map", "0:v?",  // Map video if available (? makes it optional)
-    "-map", "0:a?",  // Map audio if available (? makes it optional)
+    // Dynamic video and audio mixing based on stream count (includes mapping)
+    ...mixingConfig,
 
-    // Video codec settings - handle VP8 streams without dimensions
+    // Video codec settings optimized for real-time low latency
     "-c:v", "libx264",
-    "-preset", "ultrafast",  // Fastest preset for real-time
-    "-tune", "zerolatency",
-    "-crf", "23",
+    "-preset", "ultrafast",          // Fastest encoding preset
+    "-tune", "zerolatency",          // Zero latency tuning
+    "-crf", "28",                    // Slightly lower quality for speed (was 23)
     "-pix_fmt", "yuv420p",
-    
-    // Enhanced video filter for VP8 streams without size info
-    "-vf", "scale=640:480:force_original_aspect_ratio=decrease,pad=640:480:(ow-iw)/2:(oh-ih)/2",
-    "-r", "30", // Force 30fps
-    "-g", "60", // GOP size (2 seconds at 30fps)
-    "-keyint_min", "30", // Minimum keyframe interval
+    "-g", "30",                      // GOP size = 1 second at 30fps (was 60)
+    "-keyint_min", "30",             // Minimum GOP size
+    "-sc_threshold", "0",            // Disable scene change detection
 
-    // Audio codec settings
+    // Audio codec settings optimized for low latency
     "-c:a", "aac",
-    "-b:a", "128k",
-    "-ar", "48000", // Force sample rate
-    "-ac", "2",     // Force stereo
+    "-b:a", "96k",                   // Reduced bitrate for lower latency (was 128k)
+    "-ar", "48000",
+    "-ac", "2",
 
-    // HLS output settings
+    // Low-latency HLS output settings
     "-f", "hls",
-    "-hls_time", "2", // 2-second segments
-    "-hls_list_size", "5", // Keep 5 segments in the playlist
-    "-hls_flags", "delete_segments", // Delete old segments
+    "-hls_time", "1",                // 1-second segments (reduced from 2)
+    "-hls_list_size", "3",           // Keep only 3 segments (reduced from 5)
+    "-hls_flags", "delete_segments+independent_segments", 
+    "-hls_segment_type", "mpegts",
+    "-hls_allow_cache", "0",         // Disable caching for live streams
+    "-start_number", "0",
     "-hls_segment_filename", segmentPath,
     playlistPath,
   ];
 
+  // Log the complete FFmpeg command for debugging
+  logger.info(`🎬 [FFmpeg] Complete command: ${FFMPEG_PATH} ${args.join(' ')}`);
+  
   const ffmpegProc = spawn(FFMPEG_PATH, args, {
     // Detached mode is not needed here; we manage the lifecycle directly.
     // The 'pipe' option for stdio allows us to capture logs.
@@ -480,4 +641,91 @@ function runFfmpeg(sdpPath: string, outputDir: string, roomId: string): ChildPro
   });
 
   return ffmpegProc;
+}
+
+/**
+ * Generates dynamic FFmpeg filter arguments for multi-stream composition.
+ * @private
+ * @param {object} streamCount - Object containing video and audio stream counts
+ * @returns {string[]} Array of FFmpeg arguments for stream mixing
+ */
+function generateStreamMixingFilters(streamCount: { video: number; audio: number }): string[] {
+  const { video: videoCount, audio: audioCount } = streamCount;
+  
+  logger.info(`🎬 [FFmpeg] Generating filters for ${videoCount} video streams and ${audioCount} audio streams`);
+  
+  const filters: string[] = [];
+  
+  // Handle video streams
+  if (videoCount === 1) {
+    // Single video stream - apply scaling and map directly
+    filters.push("-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2");
+    filters.push("-map", "0:v?");  // Map the single video stream
+  } else if (videoCount > 1) {
+    // Multiple video streams - create composition
+    let videoFilter = "";
+    
+    // Scale individual video inputs
+    for (let i = 0; i < videoCount; i++) {
+      videoFilter += `[0:v:${i}]scale=640:360,setpts=PTS-STARTPTS[v${i}]; `;
+    }
+    
+    // Create layout based on number of streams
+    if (videoCount === 2) {
+      // Side-by-side layout for 2 streams
+      videoFilter += `[v0][v1]hstack=inputs=2:shortest=1[vout]`;
+    } else if (videoCount <= 4) {
+      // 2x2 grid layout for 3-4 streams
+      if (videoCount === 3) {
+        // Add a blank input for 4th position
+        videoFilter += `color=c=black:s=640x360:d=1[v3]; `;
+      }
+      const bottomIndex = videoCount === 3 ? '3' : (videoCount - 1).toString();
+      videoFilter += `[v0][v1]hstack=inputs=2[top]; [v2][v${bottomIndex}]hstack=inputs=2[bottom]; [top][bottom]vstack=inputs=2[vout]`;
+    } else {
+      // For more than 4 streams, use a simple grid approach
+      videoFilter += `[v0][v1]hstack=inputs=2[row1]; `;
+      for (let i = 2; i < Math.min(videoCount, 6); i += 2) {
+        const nextIndex = i + 1 < videoCount ? i + 1 : i;
+        videoFilter += `[v${i}][v${nextIndex}]hstack=inputs=2[row${Math.floor(i/2) + 1}]; `;
+      }
+      videoFilter += `[row1][row2]vstack=inputs=2[vout]`;
+    }
+    
+    filters.push("-filter_complex", videoFilter);
+    filters.push("-map", "[vout]");
+  } else {
+    // No video streams - this shouldn't happen but handle gracefully
+    logger.warn("🎬 [FFmpeg] No video streams available");
+  }
+  
+  // Handle audio streams
+  if (audioCount === 1) {
+    // Single audio stream - map directly
+    filters.push("-map", "0:a?");
+  } else if (audioCount > 1) {
+    // Multiple audio streams - mix them
+    let audioFilter = "";
+    const audioInputs = Array.from({ length: audioCount }, (_, i) => `[0:a:${i}]`).join('');
+    audioFilter = `${audioInputs}amix=inputs=${audioCount}:duration=longest:dropout_transition=2[aout]`;
+    
+    if (filters.includes("-filter_complex")) {
+      // Append to existing filter_complex
+      const complexIndex = filters.indexOf("-filter_complex");
+      filters[complexIndex + 1] += `; ${audioFilter}`;
+    } else {
+      filters.push("-filter_complex", audioFilter);
+    }
+    filters.push("-map", "[aout]");
+  } else {
+    // No audio streams - this shouldn't happen but handle gracefully
+    logger.warn("🎬 [FFmpeg] No audio streams available");
+  }
+  
+  filters.push("-r", "30"); // Force 30fps
+  
+  logger.info(`🎬 [FFmpeg] Generated filter arguments:`, filters);
+  logger.info(`🎬 [FFmpeg] Full filter string: ${filters.includes('-filter_complex') ? filters[filters.indexOf('-filter_complex') + 1] : 'No complex filter'}`);
+  
+  return filters;
 }

@@ -118,24 +118,53 @@ export function registerWebRtcHandlers(io: Server, socket: Socket): void {
           }
         }
         // If HLS is running with audio-only and we just got video, restart HLS for better quality
-        else if (room.hlsProcess && data.kind === 'video' && participant.hasAudio) {
+        else if (room.hlsProcess && !room.hlsProcess.killed && data.kind === 'video' && participant.hasAudio) {
           try {
             logger.info(`🔄 Restarting HLS for room ${room.id} to include video track`);
             await stopRecording(room);
-            // Small delay to ensure cleanup is complete
-            setTimeout(async () => {
-              try {
-                const { playlistUrl } = await startRecording(room);
-                await updateRoom(room.id, { hlsUrl: playlistUrl });
-                io.to(room.id).emit('hls-restarted', { roomId: room.id, playlistUrl });
-                logger.info(`✅ Restarted HLS for room ${room.id} with audio+video`);
-              } catch (e) {
-                logger.error(`Failed to restart HLS for room ${room.id}:`, e);
-              }
-            }, 1000);
+            const { playlistUrl } = await startRecording(room);
+            await updateRoom(room.id, { hlsUrl: playlistUrl });
+            io.to(room.id).emit('hls-restarted', { roomId: room.id, playlistUrl });
+            logger.info(`✅ Restarted HLS for room ${room.id} with audio+video`);
           } catch (e) {
             logger.error(`Failed to restart HLS for room ${room.id}:`, e);
           }
+        }
+      }
+      
+      // Restart HLS when new participants join and start producing (if HLS is already running)
+      const wasHlsRunning = room && room.hlsProcess && !room.hlsProcess.killed;
+      if (wasHlsRunning && !participant.isHost) {
+        // Only restart if this participant now has both audio and video (complete stream)
+        // Also add a small delay to ensure both audio and video producers are created
+        if (participant.hasAudio && participant.hasVideo) {
+          // Use setTimeout to debounce multiple rapid producer creations
+          setTimeout(async () => {
+            try {
+              // Double-check that HLS is still running and participant still has both tracks
+              if (!room.hlsProcess || room.hlsProcess.killed || !participant.hasAudio || !participant.hasVideo) {
+                logger.info(`🔄 Skipping HLS restart - conditions changed for ${participant.name}`);
+                return;
+              }
+              
+              logger.info(`🔄 Restarting HLS for room ${room.id} to include new participant: ${participant.name}`);
+              logger.info(`🔄 Room ${room.id} currently has ${room.participants.size} participants`);
+              
+              // List all participants with their producer counts
+              room.participants.forEach((p, id) => {
+                const producerCount = (p as any).producers ? (p as any).producers.size : 0;
+                logger.info(`🔄 Participant ${(p as any).name || id}: ${producerCount} producers, hasAudio: ${(p as any).hasAudio}, hasVideo: ${(p as any).hasVideo}`);
+              });
+              
+              await stopRecording(room);
+              const { playlistUrl } = await startRecording(room);
+              await updateRoom(room.id, { hlsUrl: playlistUrl });
+              io.to(room.id).emit('hls-restarted', { roomId: room.id, playlistUrl });
+              logger.info(`✅ Restarted HLS for room ${room.id} with new participant: ${participant.name}`);
+            } catch (e) {
+              logger.error(`Failed to restart HLS for room ${room.id} with new participant:`, e);
+            }
+          }, 2000); // 2 second delay to ensure both audio and video are ready
         }
       }
     } catch (error) {
